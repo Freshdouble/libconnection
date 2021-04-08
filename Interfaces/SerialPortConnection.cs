@@ -91,8 +91,15 @@ namespace libconnection.Interfaces
         private void StopExecution()
         {
             cts.Cancel();
+            try
+            {
+                workingTask.Wait(2000);
+            }
+            catch(Exception)
+            {
+
+            }
             cts.Dispose();
-            workingTask.Wait(2000);
         }
 
         public void Close()
@@ -104,7 +111,7 @@ namespace libconnection.Interfaces
             }
         }
 
-        public void Dispose()
+        public override void Dispose()
         {
             if (!disposed)
             {

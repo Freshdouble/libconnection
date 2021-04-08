@@ -14,4 +14,8 @@
     <PackageReference Include="System.IO.Ports" Version="5.0.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="libsmp\C#\libsmp\libsmp.csproj" />
+  </ItemGroup>
+
 </Project>

@@ -11,7 +11,7 @@ namespace libconnection
         public Message Message { get; set; }
     }
 
-    public abstract class DataStream
+    public abstract class DataStream : IDisposable, IStartable
     {
         private LinkedList<DataStream> uplink = new LinkedList<DataStream>();
         private LinkedList<DataStream> downlink = new LinkedList<DataStream>();
@@ -24,9 +24,9 @@ namespace libconnection
         public abstract bool SupportsDownstream { get; }
         public abstract bool SupportsUpstream { get; }
 
-        public void LinkUpstream(DataStream stream)
+        public virtual void LinkUpstream(DataStream stream)
         {
-            if(!SupportsUpstream)
+            if (!SupportsUpstream)
             {
                 throw new InvalidOperationException("Cannot link a upstream interface to " + GetType().Name);
             }
@@ -42,7 +42,7 @@ namespace libconnection
 
         public void UnlinkUpstream(DataStream stream)
         {
-            lock(uplink)
+            lock (uplink)
             {
                 uplink.Remove(stream);
                 stream.UnlinkDownstream(this);
@@ -51,11 +51,11 @@ namespace libconnection
 
         protected void LinkDownstream(DataStream stream)
         {
-            if(!SupportsDownstream)
+            if (!SupportsDownstream)
             {
                 throw new InvalidOperationException("Cannot link a downstream interface to " + GetType().Name);
             }
-            lock(uplink)
+            lock (uplink)
             {
                 downlink.AddLast(stream);
             }
@@ -63,19 +63,25 @@ namespace libconnection
 
         protected void UnlinkDownstream(DataStream stream)
         {
-            lock(uplink)
+            if (SupportsDownstream)
             {
-                downlink.Remove(stream);
+                lock (uplink)
+                {
+                    downlink.Remove(stream);
+                }
             }
         }
 
         public virtual void PublishUpstreamData(Message data)
         {
-            lock (uplink)
+            if (SupportsUpstream)
             {
-                foreach (var stream in uplink)
+                lock (uplink)
                 {
-                    stream.PublishUpstreamData(data);
+                    foreach (var stream in uplink)
+                    {
+                        stream.PublishUpstreamData(data);
+                    }
                 }
             }
             MessageReceived?.Invoke(this, new MessageEventArgs()
@@ -86,11 +92,75 @@ namespace libconnection
 
         public virtual void PublishDownstreamData(Message data)
         {
-            lock (uplink)
+            if (SupportsDownstream)
             {
-                foreach (var stream in downlink)
+                lock (uplink)
                 {
-                    stream.PublishDownstreamData(data);
+                    foreach (var stream in downlink)
+                    {
+                        stream.PublishDownstreamData(data);
+                    }
+                }
+            }
+        }
+
+        public List<Exception> Exception { get; } = new List<Exception>();
+
+        public void PublishException(Exception ex)
+        {
+            PublishException(new Exception[] { ex });
+        }
+
+        public virtual void PublishException(IEnumerable<Exception> list)
+        {
+            if (Exception != null)
+            {
+                Exception.AddRange(list);
+            }
+            if (SupportsUpstream)
+            {
+                lock (uplink)
+                {
+                    foreach (var stream in uplink)
+                    {
+                        stream.PublishException(Exception);
+                    }
+                }
+            }
+        }
+
+        public void ThrowIfException()
+        {
+            if (Exception.Count > 0)
+            {
+                throw new AggregateException(Exception);
+            }
+        }
+
+        public virtual void Dispose()
+        {
+            if (SupportsDownstream)
+            {
+                lock (uplink)
+                {
+                    foreach (var stream in downlink)
+                    {
+                        stream.Dispose();
+                    }
+                }
+            }
+        }
+
+        public virtual void StartService()
+        {
+            if (SupportsDownstream)
+            {
+                lock (uplink)
+                {
+                    foreach (var stream in downlink)
+                    {
+                        stream.StartService();
+                    }
                 }
             }
         }

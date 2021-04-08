@@ -24,6 +24,8 @@ namespace libconnection
 
         public DateTime CreationTime => creationTime;
 
+        public int Length => data.Count;
+
         public byte[] Data
         {
             get
@@ -57,6 +59,17 @@ namespace libconnection
             if(remove)
             {
                 data.RemoveFirst();
+            }
+            return ret;
+        }
+
+        public byte[] PopAndRemoveFirstMultiple(int blocksize)
+        {
+            int toRemove = Math.Min(blocksize, Length);
+            byte[] ret = new byte[toRemove];
+            for(int i = 0; i < toRemove; i++)
+            {
+                ret[i] = PopFirst(true);
             }
             return ret;
         }

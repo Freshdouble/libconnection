@@ -5,13 +5,38 @@ using libsmp;
 
 namespace libconnection.Decoders
 {
-    public class SMPDecoder
+    public class SMPDecoder : DataStream
     {
         private ManagedSMP smp = new ManagedSMP();
 
         public SMPDecoder()
         {
 
+        }
+
+        public override bool SupportsDownstream => true;
+
+        public override bool SupportsUpstream => true;
+
+        public override void PublishUpstreamData(Message data)
+        {
+            //Try decode
+            smp.ProcessBytes(data.Data);
+            while(smp.StoredMessages > 0)
+            {
+                base.PublishUpstreamData(new Message(smp.GetMessage()));
+            }
+        }
+
+        public override void PublishDownstreamData(Message data)
+        {
+            base.PublishDownstreamData(new Message(smp.GenerateMessage(data.Data)));
+        }
+
+        public override void Dispose()
+        {
+            smp.Dispose();
+            base.Dispose();
         }
     }
 }

@@ -28,12 +28,38 @@ namespace libconnection
             }
         }
 
+        public override void PublishException(IEnumerable<Exception> list)
+        {
+            base.PublishException(list);
+            if (semaphore.CurrentCount == 0)
+            {
+                semaphore.Release();
+            }
+        }
+
         public async Task<Message> ReadMessageAsync()
         {
             await semaphore.WaitAsync().ConfigureAwait(false);
             lock (messages)
             {
+                ThrowIfException();
                 return messages.Dequeue();
+            }
+        }
+
+        public async Task<Message> ReadMessageAsync(int timeout)
+        {
+            if(await semaphore.WaitAsync(timeout))
+            {
+                lock (messages)
+                {
+                    ThrowIfException();
+                    return messages.Dequeue();
+                }
+            }
+            else
+            {
+                throw new TimeoutException();
             }
         }
     }
