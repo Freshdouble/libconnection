@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using System.Timers;
 using Timer = System.Timers.Timer;
 using System.Linq;
+using Heartbeat;
 
 namespace libconnection.Interfaces
 {
@@ -19,20 +20,35 @@ namespace libconnection.Interfaces
         public override bool SupportsUpstream => false;
 
         private Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-        private IPEndPoint endpoint;
+        private EndPoint localEndpoint;
         private Task receiveTask = null;
         private CancellationTokenSource cts = new CancellationTokenSource();
         private Timer heartbeatTimer = new Timer(50);
 
+        private HeartbeatManager heartbeatManager = new HeartbeatManager(1000);
+
         public UDPServer(IPEndPoint endpoint, bool sendheartbeat)
         {
-            this.endpoint = endpoint;
-            if(sendheartbeat)
+            localEndpoint = endpoint;
+            if (sendheartbeat)
             {
                 heartbeatTimer.Elapsed += HeartbeatTimer_Elapsed;
                 heartbeatTimer.AutoReset = true;
                 heartbeatTimer.Enabled = true;
             }
+        }
+
+        public UDPServer(IPEndPoint endpoint, IEnumerable<IPEndPoint> staticEndpoints, bool sendheartbeat) : this(endpoint, sendheartbeat)
+        {
+            foreach(var staticendpoint in staticEndpoints)
+            {
+                AddStaticEndpoint(staticendpoint);
+            }
+        }
+
+        public void AddStaticEndpoint(IPEndPoint endpoint)
+        {
+            heartbeatManager.AddStaticEndpoint(endpoint);
         }
 
         public bool UseShortHeader { get; set; } = false;
@@ -41,13 +57,27 @@ namespace libconnection.Interfaces
         {
             Package package = Package.CreateHeartbeat();
             package.UseShortHeader = UseShortHeader;
-            socket.SendTo(package.Serialize(), endpoint);
+            SendToAll(package);
+        }
+
+        private void SendToAll(Package package)
+        {
+            SendToAll(package.Serialize());
+        }
+
+        private void SendToAll(byte[] data)
+        {
+            List<IPEndPoint> endpoints = heartbeatManager.retrieve();
+            foreach(var endpoint in endpoints)
+            {
+                socket.SendTo(data, endpoint);
+            }
         }
 
         public override void StartService()
         {
             socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.ReuseAddress, true);
-            socket.Bind(endpoint);
+            socket.Bind(localEndpoint);
             receiveTask = Task.Factory.StartNew(async () =>
             {
                 CancellationToken token = cts.Token;
@@ -61,10 +91,14 @@ namespace libconnection.Interfaces
                 {
                     while (!token.IsCancellationRequested)
                     {
-                        var receiveTask = socket.ReceiveFromAsync(buffer, SocketFlags.None, endpoint);
+                        var receiveTask = socket.ReceiveFromAsync(buffer, SocketFlags.None, localEndpoint);
                         if (await Task.WhenAny(receiveTask, tcs.Task) == receiveTask)
                         {
                             var receiveFromResult = receiveTask.Result;
+                            if(receiveFromResult.RemoteEndPoint is IPEndPoint ipendpoint)
+                            {
+                                heartbeatManager.beat(ipendpoint, DateTime.Now);
+                            }
                             if (receiveFromResult.ReceivedBytes > 0)
                             {
                                 Package data = Package.parse(buffer.Take(receiveFromResult.ReceivedBytes));
@@ -89,7 +123,7 @@ namespace libconnection.Interfaces
             {
                 UseShortHeader = UseShortHeader
             };
-            socket.SendTo(package.Serialize(), endpoint);
+            SendToAll(package);
         }
     }
 }
