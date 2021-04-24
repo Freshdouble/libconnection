@@ -4,9 +4,27 @@ using System.Collections.Generic;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Linq;
 
 namespace libconnection.Decoders
 {
+
+    /********************************************************
+     * Dataformat
+     *  Header Byte
+     *      2MSBs TransmitterState
+     *          0 -> First subpacket of message
+     *          1 -> Consecutive subpacket of message
+     *          2 -> Last subpacket of message. If the message consists of a single subpacket this is the used state and the packet counter is 0
+     *      1Bit Control Messagebit
+     *          0 -> Packet is a payload packet
+     *          1 -> Packet is a stream control packet eg ACK or NACK
+     *      Last Bits Packet counter gets increment with each new message so other end can decide if it already received that message
+     *      
+     *  Payload
+     *  
+     *  Checksum at the end of last packet
+     * ******************************************************/
     public class SecTransmit : DataStream, IStartable
     {
         private ConcurrentQueue<Message> queue = new ConcurrentQueue<Message>();
@@ -18,6 +36,11 @@ namespace libconnection.Decoders
         public override bool SupportsDownstream => true;
 
         public override bool SupportsUpstream => true;
+
+        private int receivepacketcounter = -1;
+        private List<byte> receiveBuffer = new List<byte>();
+
+        private SemaphoreSlim messageSemaphore = new SemaphoreSlim(0);
 
         public int MaxBytesPerPacket
         {
@@ -31,14 +54,16 @@ namespace libconnection.Decoders
             }
         }
 
+        public int RetryCounter { get; set; } = 10;
+
         public SecTransmit()
         {
         }
 
         private Message PrepareMessage(Message msg)
         {
-            byte checksum = CalcChecksum(msg);
-            msg.PushEnd(checksum);
+            //byte checksum = CalcChecksum(msg);
+            //msg.PushEnd(checksum);
             return msg;
         }
 
@@ -56,7 +81,7 @@ namespace libconnection.Decoders
             tcs = new TaskCompletionSource<bool>();
             var task = tcs.Task;
             bool ret = false;
-            if(await Task.WhenAny(task, Task.Delay(ACKTimeout)) == task)
+            if (await Task.WhenAny(task, Task.Delay(ACKTimeout)) == task)
             {
                 ret = task.Result;
             }
@@ -67,31 +92,62 @@ namespace libconnection.Decoders
         public override void PublishDownstreamData(Message data)
         {
             queue.Enqueue(data);
+            messageSemaphore.Release();
         }
 
         public override void PublishUpstreamData(Message data)
         {
-            byte checksum = data.PopLast();
-            bool correctChecksum = checksum == CalcChecksum(data);
-            if (correctChecksum)
+            SecTransmitHeader header = new SecTransmitHeader(data.PopFirst());
+            if (header.IsControlMessage) //Check if this is a controlmessage
             {
-                SecTransmitHeader header = new SecTransmitHeader(data.PopFirst());
-                if (header.IsControlMessage) //Check if this is a controlmessage
+                ControlMessageType ctlmsg = (ControlMessageType)data.PopFirst();
+                switch (ctlmsg)
                 {
-                    ControlMessageType ctlmsg = (ControlMessageType)data.PopFirst();
-                    switch (ctlmsg)
+                    case ControlMessageType.ACK:
+                        tcs?.SetResult(true);
+                        break;
+                    case ControlMessageType.NACK:
+                        tcs?.SetResult(false);
+                        break;
+                    default:
+                        break;
+                }
+            }
+            else
+            {
+                bool sendAck = true;
+                if (header.PacketCount != receivepacketcounter)
+                {
+                    if (header.State == PacketState.FirstTransmission)
                     {
-                        case ControlMessageType.ACK:
-                            tcs?.SetResult(true);
-                            break;
-                        case ControlMessageType.NACK:
-                            tcs?.SetResult(false);
-                            break;
-                        default:
-                            break;
+                        receiveBuffer.Clear();
+                    }
+                    receivepacketcounter = header.PacketCount; //Update local packet counter to not receive the packet twice
+                    if(header.State == PacketState.LastPacket)
+                    {
+                        byte checksum = data.PopLast();
+                        receiveBuffer.AddRange(data);
+                        if (checksum == CalcChecksum(receiveBuffer))
+                        {
+                            base.PublishUpstreamData(new Message(receiveBuffer));
+                        }
+                        else
+                        {
+                            if(receivepacketcounter == 0)
+                            {
+                                //This was the only packet of the message so we can send a NACK
+                                sendAck = false;
+                            }
+                        }
+                        receivepacketcounter = -1;
+                        receiveBuffer.Clear();
+                    }
+                    else
+                    {
+                        receiveBuffer.AddRange(data);
                     }
                 }
-                else
+                if (sendAck)
                 {
                     SecTransmitHeader transmitHeader = new SecTransmitHeader()
                     {
@@ -100,27 +156,22 @@ namespace libconnection.Decoders
                     byte[] msg = new byte[] { transmitHeader, (byte)ControlMessageType.ACK };
                     Message ACKMessage = new Message(msg);
                     base.PublishDownstreamData(ACKMessage);
-                    base.PublishUpstreamData(data);
                 }
-            }
-            else
-            {
-                SecTransmitHeader header = new SecTransmitHeader()
-                {
-                    IsControlMessage = true
-                };
-                byte[] msg = new byte[] { header, (byte)ControlMessageType.NACK };
-                Message NACKMessage = new Message(msg);
-                base.PublishDownstreamData(NACKMessage);
             }
         }
 
         private async Task SendAndRetry(Message msg)
         {
             bool ack;
+            int retry = RetryCounter + 1;
             do
             {
-                ack = await SendMessage(new Message(msg)).ConfigureAwait(false);
+                if (retry <= 0)
+                {
+                    throw new Exception("Couldn't send message");
+                }
+                retry--;
+                ack = await SendMessage(msg.Copy()).ConfigureAwait(false);
             } while (!ack);
         }
 
@@ -132,28 +183,34 @@ namespace libconnection.Decoders
                 SecTransmitHeader header = new SecTransmitHeader()
                 {
                     State = PacketState.FirstTransmission,
-                    IsControlMessage = false
+                    IsControlMessage = false,
+                    PacketCount = 0
                 };
+                Random rand = new Random();
                 while (!token.IsCancellationRequested && shouldRun)
                 {
                     Message msg;
+                    await messageSemaphore.WaitAsync();
                     if (queue.TryDequeue(out msg))
                     {
                         try
                         {
+                            msg.PushEnd(CalcChecksum(msg));
                             header.State = PacketState.FirstTransmission;
-                            header.PacketCount = 0;
+                            header.PacketCount = rand.Next(0, 31);
                             if (msg.Length > bytesperPacket)
                             {
                                 do
                                 {
-                                    Message newMsg = new Message(msg.PopAndRemoveFirstMultiple(bytesperPacket));
-                                    if (msg.Length == 0 && header.State == PacketState.ConsecutiveTransmission)
+                                    Message newMsg = new Message(msg.PopAndRemoveFirstMultiple(bytesperPacket))
+                                    {
+                                        Port = msg.Port
+                                    };
+                                    if (msg.Length == 0)
                                     {
                                         header.State = PacketState.LastPacket;
                                     }
                                     newMsg.PushFront(header);
-                                    PrepareMessage(newMsg); //Add Checksum to message
                                     await SendAndRetry(newMsg).ConfigureAwait(false);
                                     if (header.State == PacketState.FirstTransmission)
                                     {
@@ -164,6 +221,7 @@ namespace libconnection.Decoders
                             }
                             else
                             {
+                                header.State = PacketState.LastPacket;
                                 msg.PushFront(header);
                                 PrepareMessage(msg);
                                 await SendAndRetry(msg).ConfigureAwait(false);
@@ -181,10 +239,10 @@ namespace libconnection.Decoders
                             //We have some other exceptions that we might want to handle upstream
                             PublishException(ex);
                         }
-                    }
-                    else
-                    {
-                        await Task.Yield();
+                        catch (Exception ex)
+                        {
+                            PublishException(ex);
+                        }
                     }
                 }
             }, TaskCreationOptions.LongRunning);
@@ -199,7 +257,7 @@ namespace libconnection.Decoders
             {
                 workingTask?.Wait(1000);
             }
-            catch(Exception)
+            catch (Exception)
             {
 
             }
@@ -209,7 +267,7 @@ namespace libconnection.Decoders
         public static byte CalcChecksum(IEnumerable<byte> data)
         {
             byte sum = 0;
-            foreach(byte b in data)
+            foreach (byte b in data)
             {
                 sum += b;
             }

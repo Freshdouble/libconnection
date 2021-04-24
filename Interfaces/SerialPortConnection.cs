@@ -60,7 +60,7 @@ namespace libconnection.Interfaces
                                 token.ThrowIfCancellationRequested();
                                 ExecutionContext.Run(ec, (context) =>
                                 {
-                                    PublishUpstreamData(msg as Message);
+                                    base.PublishUpstreamData(msg as Message);
                                     if (sslm.CurrentCount == 0)
                                     {
                                         sslm.Release();
@@ -69,7 +69,7 @@ namespace libconnection.Interfaces
                             }
                             else
                             {
-                                PublishUpstreamData(msg);
+                                base.PublishUpstreamData(msg);
                             }
                         }
                     }
@@ -81,6 +81,12 @@ namespace libconnection.Interfaces
                 port.DataReceived -= eventhandler;
             }, TaskCreationOptions.LongRunning);
             this.port = port;
+        }
+
+        public override void PublishDownstreamData(Message data)
+        {
+            byte[] msg = data.Data;
+            port.Write(msg, 0, msg.Length);
         }
 
         ~SerialPortConnection()

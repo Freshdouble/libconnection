@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 using System.Linq;
+using System.Diagnostics.CodeAnalysis;
 
 namespace libconnection
 {
@@ -22,9 +23,20 @@ namespace libconnection
             creationTime = DateTime.Now;
         }
 
+        public Message Copy()
+        {
+            return new Message(this.Data)
+            {
+                Port = Port,
+                creationTime = creationTime
+            };
+        }
+
         public DateTime CreationTime => creationTime;
 
         public int Length => data.Count;
+
+        public int Port { get; set; } = 0;
 
         public byte[] Data
         {

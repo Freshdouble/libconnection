@@ -24,6 +24,30 @@ namespace libconnection
         public abstract bool SupportsDownstream { get; }
         public abstract bool SupportsUpstream { get; }
 
+        public int FilterPort { get; set; } = -1;
+
+        private IEnumerable<DataStream> GetUplinks()
+        {
+            lock (uplink)
+            {
+                foreach (var link in uplink)
+                {
+                    yield return link;
+                }
+            }
+        }
+
+        private IEnumerable<DataStream> GetDownlinks()
+        {
+            lock (downlink)
+            {
+                foreach (var link in downlink)
+                {
+                    yield return link;
+                }
+            }
+        }
+
         public virtual void LinkUpstream(DataStream stream)
         {
             if (!SupportsUpstream)
@@ -33,10 +57,10 @@ namespace libconnection
             lock (uplink)
             {
                 uplink.AddLast(stream);
-                if (stream.SupportsDownstream)
-                {
-                    stream.LinkDownstream(this);
-                }
+            }
+            if (stream.SupportsDownstream)
+            {
+                stream.LinkDownstream(this);
             }
         }
 
@@ -45,8 +69,8 @@ namespace libconnection
             lock (uplink)
             {
                 uplink.Remove(stream);
-                stream.UnlinkDownstream(this);
             }
+            stream.UnlinkDownstream(this);
         }
 
         protected void LinkDownstream(DataStream stream)
@@ -72,16 +96,29 @@ namespace libconnection
             }
         }
 
+        private void PushDataUpstream(Message data)
+        {
+            if (FilterPort >= 0)
+            {
+                if (FilterPort == data.Port)
+                {
+                    PublishUpstreamData(data);
+                }
+            }
+            else
+            {
+                PublishUpstreamData(data);
+            }
+        }
+
         public virtual void PublishUpstreamData(Message data)
         {
             if (SupportsUpstream)
             {
-                lock (uplink)
+                var upstreamlinks = GetUplinks();
+                foreach (var stream in upstreamlinks)
                 {
-                    foreach (var stream in uplink)
-                    {
-                        stream.PublishUpstreamData(data);
-                    }
+                    stream.PushDataUpstream(data);
                 }
             }
             MessageReceived?.Invoke(this, new MessageEventArgs()
@@ -94,12 +131,14 @@ namespace libconnection
         {
             if (SupportsDownstream)
             {
-                lock (uplink)
+                if (FilterPort >= 0)
                 {
-                    foreach (var stream in downlink)
-                    {
-                        stream.PublishDownstreamData(data);
-                    }
+                    data.Port = FilterPort;
+                }
+                var downlinks = GetDownlinks();
+                foreach (var stream in downlinks)
+                {
+                    stream.PublishDownstreamData(data);
                 }
             }
         }
@@ -119,12 +158,23 @@ namespace libconnection
             }
             if (SupportsUpstream)
             {
-                lock (uplink)
+                var upstreamlinks = GetUplinks();
+                foreach (var stream in upstreamlinks)
                 {
-                    foreach (var stream in uplink)
-                    {
-                        stream.PublishException(Exception);
-                    }
+                    stream.PublishException(Exception);
+                }
+            }
+        }
+
+        private void ClearExceptions()
+        {
+            Exception.Clear();
+            if (SupportsDownstream)
+            {
+                var downlinks = GetDownlinks();
+                foreach (var stream in downlinks)
+                {
+                    stream.ClearExceptions();
                 }
             }
         }
@@ -133,7 +183,9 @@ namespace libconnection
         {
             if (Exception.Count > 0)
             {
-                throw new AggregateException(Exception);
+                List<Exception> exceptions = Exception.Copy();
+                ClearExceptions();
+                throw new AggregateException(exceptions);
             }
         }
 
@@ -141,12 +193,10 @@ namespace libconnection
         {
             if (SupportsDownstream)
             {
-                lock (uplink)
+                var downlinks = GetDownlinks();
+                foreach (var stream in downlinks)
                 {
-                    foreach (var stream in downlink)
-                    {
-                        stream.Dispose();
-                    }
+                    stream.Dispose();
                 }
             }
         }
@@ -155,12 +205,10 @@ namespace libconnection
         {
             if (SupportsDownstream)
             {
-                lock (uplink)
+                var downlinks = GetDownlinks();
+                foreach (var stream in downlinks)
                 {
-                    foreach (var stream in downlink)
-                    {
-                        stream.StartService();
-                    }
+                    stream.StartService();
                 }
             }
         }

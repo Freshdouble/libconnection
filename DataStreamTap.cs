@@ -17,12 +17,12 @@ namespace libconnection
 
         public override void PublishUpstreamData(Message data)
         {
-            lock(messages)
+            lock (messages)
             {
                 messages.Enqueue(data);
             }
             base.PublishUpstreamData(data);
-            if(semaphore.CurrentCount == 0)
+            if (semaphore.CurrentCount == 0)
             {
                 semaphore.Release();
             }

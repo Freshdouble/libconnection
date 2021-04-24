@@ -1,13 +1,16 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <TargetFramework>net5.0</TargetFramework>
   </PropertyGroup>
 
   <ItemGroup>
     <Compile Remove="libsmp\**" />
+    <Compile Remove="xcode\**" />
     <EmbeddedResource Remove="libsmp\**" />
+    <EmbeddedResource Remove="xcode\**" />
     <None Remove="libsmp\**" />
+    <None Remove="xcode\**" />
   </ItemGroup>
 
   <ItemGroup>
@@ -16,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="libsmp\C#\libsmp\libsmp.csproj" />
+    <ProjectReference Include="xcode\libxcmparse\libxcmparse.csproj" />
   </ItemGroup>
 
 </Project>

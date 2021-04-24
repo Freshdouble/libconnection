@@ -25,6 +25,7 @@ namespace libconnection
 
         public override void StartService()
         {
+            TopElement.LinkUpstream(this);
             TopElement?.StartService();
         }
     }
