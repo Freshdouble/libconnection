@@ -46,11 +46,6 @@ namespace libconnection.Interfaces
             }
         }
 
-        public void AddStaticEndpoint(IPEndPoint endpoint)
-        {
-            heartbeatManager.AddStaticEndpoint(endpoint);
-        }
-
         public bool UseShortHeader { get; set; } = false;
 
         public void AddStaticEndpoint(IPEndPoint endPoint)
@@ -66,20 +61,6 @@ namespace libconnection.Interfaces
             foreach(var endpoint in endpoints)
             {
                 socket.SendTo(package.Serialize(), endpoint);
-            }
-        }
-
-        private void SendToAll(Package package)
-        {
-            SendToAll(package.Serialize());
-        }
-
-        private void SendToAll(byte[] data)
-        {
-            List<IPEndPoint> endpoints = heartbeatManager.retrieve();
-            foreach(var endpoint in endpoints)
-            {
-                socket.SendTo(data, endpoint);
             }
         }
 
@@ -104,10 +85,6 @@ namespace libconnection.Interfaces
                         if (await Task.WhenAny(receiveTask, tcs.Task) == receiveTask)
                         {
                             var receiveFromResult = receiveTask.Result;
-                            if(receiveFromResult.RemoteEndPoint is IPEndPoint ipendpoint)
-                            {
-                                heartbeatManager.beat(ipendpoint, DateTime.Now);
-                            }
                             if (receiveFromResult.ReceivedBytes > 0)
                             {
                                 Package data = Package.parse(buffer.Take(receiveFromResult.ReceivedBytes));
