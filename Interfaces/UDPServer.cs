@@ -25,7 +25,7 @@ namespace libconnection.Interfaces
         private CancellationTokenSource cts = new CancellationTokenSource();
         private Timer heartbeatTimer = new Timer(50);
 
-        private HeartbeatManager heartbeatManager = new HeartbeatManager(1000);
+        private HeartbeatManager heartbeatmanager = new HeartbeatManager(1000);
 
         public UDPServer(IPEndPoint endpoint, bool sendheartbeat)
         {
@@ -53,11 +53,20 @@ namespace libconnection.Interfaces
 
         public bool UseShortHeader { get; set; } = false;
 
+        public void AddStaticEndpoint(IPEndPoint endPoint)
+        {
+            heartbeatmanager.AddStaticEndpoint(endPoint);
+        }
+
         private void HeartbeatTimer_Elapsed(object sender, ElapsedEventArgs e)
         {
             Package package = Package.CreateHeartbeat();
             package.UseShortHeader = UseShortHeader;
-            SendToAll(package);
+            List<IPEndPoint> endpoints = heartbeatmanager.retrieve(false);
+            foreach(var endpoint in endpoints)
+            {
+                socket.SendTo(package.Serialize(), endpoint);
+            }
         }
 
         private void SendToAll(Package package)
@@ -102,6 +111,10 @@ namespace libconnection.Interfaces
                             if (receiveFromResult.ReceivedBytes > 0)
                             {
                                 Package data = Package.parse(buffer.Take(receiveFromResult.ReceivedBytes));
+                                if(receiveFromResult.RemoteEndPoint is IPEndPoint ipendpoint)
+                                {
+                                    heartbeatmanager.beat(ipendpoint, DateTime.Now);
+                                }
                                 if (data.type == Package.Type.DATAFRAME)
                                 {
                                     PublishDownstreamData(new Message(data.payload));
@@ -115,6 +128,20 @@ namespace libconnection.Interfaces
                 }
             }, TaskCreationOptions.LongRunning);
             base.StartService();
+        }
+
+        private void SendToAll(Package package)
+        {
+            SendToAll(package.Serialize());
+        }
+
+        private void SendToAll(byte[] data)
+        {
+            List<IPEndPoint> endpoints = heartbeatmanager.retrieve(true);
+            foreach(var endpoint in endpoints)
+            {
+                socket.SendTo(data, endpoint);
+            }
         }
 
         public override void PublishUpstreamData(Message data)

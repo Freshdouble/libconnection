@@ -22,10 +22,16 @@ namespace libconnection
         {
             TopElement?.Dispose();
         }
+        
+        public bool IsConnected {get; private set;} = false;
 
         public override void StartService()
         {
-            TopElement.LinkUpstream(this);
+            if(TopElement.SupportsUpstream)
+            {
+                TopElement.LinkUpstream(this);
+                IsConnected = true;
+            }
             TopElement?.StartService();
         }
     }
