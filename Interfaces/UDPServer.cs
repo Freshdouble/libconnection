@@ -48,11 +48,6 @@ namespace libconnection.Interfaces
 
         public bool UseShortHeader { get; set; } = false;
 
-        public void AddStaticEndpoint(IPEndPoint endPoint)
-        {
-            heartbeatmanager.AddStaticEndpoint(endPoint);
-        }
-
         private void HeartbeatTimer_Elapsed(object sender, ElapsedEventArgs e)
         {
             Package package = Package.CreateHeartbeat();
@@ -88,10 +83,6 @@ namespace libconnection.Interfaces
                             if (receiveFromResult.ReceivedBytes > 0)
                             {
                                 Package data = Package.parse(buffer.Take(receiveFromResult.ReceivedBytes));
-                                if(receiveFromResult.RemoteEndPoint is IPEndPoint ipendpoint)
-                                {
-                                    heartbeatmanager.beat(ipendpoint, DateTime.Now);
-                                }
                                 if (data.type == Package.Type.DATAFRAME)
                                 {
                                     PublishDownstreamData(new Message(data.payload));
@@ -105,20 +96,6 @@ namespace libconnection.Interfaces
                 }
             }, TaskCreationOptions.LongRunning);
             base.StartService();
-        }
-
-        private void SendToAll(Package package)
-        {
-            SendToAll(package.Serialize());
-        }
-
-        private void SendToAll(byte[] data)
-        {
-            List<IPEndPoint> endpoints = heartbeatmanager.retrieve(true);
-            foreach(var endpoint in endpoints)
-            {
-                socket.SendTo(data, endpoint);
-            }
         }
 
         public override void PublishUpstreamData(Message data)

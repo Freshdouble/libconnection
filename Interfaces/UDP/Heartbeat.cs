@@ -56,7 +56,7 @@ namespace Heartbeat
                 {
                     epMap[ep] = timestamp;
                 }
-                else
+                else if(!staticEndpoints.Contains(ep))
                 {
                     epMap.Add(ep, timestamp);
                     Console.WriteLine("[HeartbeatManager] Port {0} connected", ep.Port);
