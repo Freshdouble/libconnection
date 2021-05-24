@@ -30,6 +30,10 @@ namespace libconnection.Decoders
 
         public override void PublishUpstreamData(Message data)
         {
+            if(data is AddressMessage addrmsg)
+            {
+                addrmsg.AddAddresstoFront();
+            }
             for(int i = 0; i < matchfunctions.Length; i++)
             {
                 if(matchfunctions[i].Invoke(data))
@@ -44,7 +48,7 @@ namespace libconnection.Decoders
 
         public void PublishDownstreamData(DataCommand message)
         {
-            PublishDownstreamData(new Message(message.GetData()));
+            base.PublishDownstreamData(new Message(message.GetData()));
         }
     }
 }

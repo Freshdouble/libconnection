@@ -18,6 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\libCAN\libCAN.csproj" />
     <ProjectReference Include="libsmp\C#\libsmp\libsmp.csproj" />
     <ProjectReference Include="xcode\libxcmparse\libxcmparse.csproj" />
   </ItemGroup>
