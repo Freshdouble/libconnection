@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace libconnection.Interfaces
 {
-    class CANInterface : DataStream
+    public class CANInterface : DataStream
     {
         private CAN can;
         public override bool SupportsDownstream => false;
