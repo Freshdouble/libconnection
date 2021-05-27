@@ -46,16 +46,43 @@ namespace libconnection.Interfaces
             }
         }
 
+        public void AddStaticEndpoint(IPEndPoint endpoint)
+        {
+            heartbeatmanager.AddStaticEndpoint(endpoint);
+        }
+
         public bool UseShortHeader { get; set; } = false;
+
+        private void SocketSend(ref Package package, IPEndPoint endPoint)
+        {
+            SocketSend(package.Serialize(), endPoint);
+        }
+
+        private void SocketSend(byte[] data, IPEndPoint endPoint)
+        {
+            try
+            {
+                socket.SendTo(data, endPoint);
+            }
+            catch (SocketException)
+            {
+
+            }
+            catch (Exception ex)
+            {
+                PublishException(ex);
+            }
+        }
 
         private void HeartbeatTimer_Elapsed(object sender, ElapsedEventArgs e)
         {
             Package package = Package.CreateHeartbeat();
             package.UseShortHeader = UseShortHeader;
             List<IPEndPoint> endpoints = heartbeatmanager.retrieve(false);
+            byte[] data = package.Serialize();
             foreach(var endpoint in endpoints)
             {
-                socket.SendTo(package.Serialize(), endpoint);
+                SocketSend(data, endpoint);
             }
         }
 
@@ -96,6 +123,20 @@ namespace libconnection.Interfaces
                 }
             }, TaskCreationOptions.LongRunning);
             base.StartService();
+        }
+
+        private void SendToAll(Package package)
+        {
+            SendToAll(package.Serialize());
+        }
+
+        private void SendToAll(byte[] data)
+        {
+            List<IPEndPoint> endpoints = heartbeatmanager.retrieve();
+            foreach (var endpoint in endpoints)
+            {
+                SocketSend(data, endpoint);
+            }
         }
 
         public override void PublishUpstreamData(Message data)

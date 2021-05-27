@@ -48,12 +48,7 @@ namespace libconnection.Interfaces
         {
             Package packeddata = Package.CreateHeartbeat();
             List<IPEndPoint> endpoints = manager.retrieve(false); // Only send heartbeat to the registered endpoints
-            Task<int>[] sendTasks = new Task<int>[endpoints.Count];
-            for (int i = 0; i < sendTasks.Length; i++)
-            {
-                sendTasks[i] = socket.SendToAsync(packeddata.Serialize(), SocketFlags.None, endpoints[i]);
-            }
-            Task.WaitAll(sendTasks, 1000, cts.Token);
+            SocketSendToAll(ref packeddata, endpoints);
         }
 
         public bool UseShortHeader { get; set; } = false;
@@ -140,13 +135,65 @@ namespace libconnection.Interfaces
                 {
                     UseShortHeader = UseShortHeader
                 };
-                List<IPEndPoint> endpoints = manager.retrieve();
-                Task<int>[] sendTasks = new Task<int>[endpoints.Count];
-                for (int i = 0; i < sendTasks.Length; i++)
+                SocketSendToAll(ref packeddata);
+            }
+        }
+
+        private void SocketSendToAll(ref Package package)
+        {
+            SocketSendToAll(package.Serialize());
+        }
+
+        private void SocketSendToAll(ref Package package, List<IPEndPoint> endPoints)
+        {
+            SocketSendToAll(package.Serialize(), endPoints);
+        }
+
+        private void SocketSendToAll(byte[] data)
+        {
+            List<IPEndPoint> endpoints = manager.retrieve();
+            SocketSendToAll(data, endpoints);
+        }
+
+        private void SocketSendToAll(byte[] data, List<IPEndPoint> endPoints)
+        {
+            Task<int>[] sendTasks = new Task<int>[endPoints.Count];
+            for (int i = 0; i < sendTasks.Length; i++)
+            {
+                try
                 {
-                    sendTasks[i] = socket.SendToAsync(packeddata.Serialize(), SocketFlags.None, endpoints[i]);
+                    sendTasks[i] = socket.SendToAsync(data, SocketFlags.None, endPoints[i]);
                 }
+                catch (SocketException)
+                {
+
+                }
+                catch (Exception ex)
+                {
+                    PublishException(ex);
+                }
+            }
+            try
+            {
                 Task.WaitAll(sendTasks, 1000, cts.Token);
+            }
+            catch (SocketException)
+            {
+
+            }
+            catch (AggregateException ex)
+            {
+                foreach (var e in ex.InnerExceptions)
+                {
+                    if (!(e is SocketException))
+                    {
+                        PublishException(e);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                PublishException(ex);
             }
         }
 
