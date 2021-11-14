@@ -1,4 +1,4 @@
-﻿using libconnection.Interfaces.UDP;
+using libconnection.Interfaces.UDP;
 using System;
 using System.Collections.Generic;
 using System.Net;

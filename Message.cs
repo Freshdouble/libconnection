@@ -108,7 +108,7 @@ namespace libconnection
 
         public override string ToString()
         {
-            return string.Format("{0}:[{1}]", creationTime.ToString("HH-mm-ss"), BitConverter.ToString(Data).Replace("-", ""));
+            return string.Format("{0:dd.MM.yyyy.HH-mm-ss}:[{1}]", creationTime, BitConverter.ToString(Data).Replace("-", ""));
         }
     }
 }
