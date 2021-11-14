@@ -110,6 +110,7 @@ namespace libconnection.Interfaces
                             if (receiveFromResult.ReceivedBytes > 0)
                             {
                                 Package data = Package.parse(buffer.Take(receiveFromResult.ReceivedBytes));
+                                heartbeatmanager.beat((IPEndPoint)receiveFromResult.RemoteEndPoint, DateTime.Now);
                                 if (data.type == Package.Type.DATAFRAME)
                                 {
                                     PublishDownstreamData(new Message(data.payload));
