@@ -11,6 +11,9 @@ namespace libconnection
         public DataStream TopElement { get => streams.Count > 0 ? streams[streams.Count - 1] : null; }
 
         public override bool SupportsUpstream => false;
+        public string Name { get; set; } = string.Empty;
+
+        public List<object> AdditionalData { get; } = new List<object>();
 
         public void Add(DataStream stream)
         {

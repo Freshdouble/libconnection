@@ -15,7 +15,6 @@ namespace libconnection
     {
         private LinkedList<DataStream> uplink = new LinkedList<DataStream>();
         private LinkedList<DataStream> downlink = new LinkedList<DataStream>();
-        private TaskCompletionSource<Message> tcs = null;
         public event EventHandler<MessageEventArgs> MessageReceived;
         public DataStream()
         {

@@ -9,6 +9,14 @@ namespace libconnection
 {
     public class Message : IEnumerable<byte>
     {
+        public enum CompressionMethodType
+        {
+            Base64,
+            CsvCompatibleOrdered
+        }
+        private static readonly DateTime UnixEpoch =
+            new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        
         private LinkedList<byte> data;
         private DateTime creationTime;
         public Message()
@@ -23,12 +31,16 @@ namespace libconnection
             creationTime = DateTime.Now;
         }
 
+        public bool UseCompressedPrint { get; set; } = true;
+        public CompressionMethodType CompressionMethod { get; set; } = CompressionMethodType.CsvCompatibleOrdered;
+
         public Message Copy()
         {
             return new Message(this.Data)
             {
                 Port = Port,
-                creationTime = creationTime
+                creationTime = creationTime,
+                UseCompressedPrint = UseCompressedPrint
             };
         }
 
@@ -108,7 +120,28 @@ namespace libconnection
 
         public override string ToString()
         {
-            return string.Format("{0:dd.MM.yyyy.HH-mm-ss}:[{1}]", creationTime, BitConverter.ToString(Data).Replace("-", ""));
+            if (UseCompressedPrint)
+            {
+                switch (CompressionMethod)
+                {
+                    case CompressionMethodType.Base64:
+                        return string.Format("Time:{0:dd.MM.yyyy.HH-mm-ss}; Timestamp:{1}; Data:[{2}];", creationTime, GetCurrentUnixTimestampMillis(creationTime.ToUniversalTime()), Convert.ToBase64String(Data));
+                    case CompressionMethodType.CsvCompatibleOrdered:
+                        return string.Format("{0}; {1};", GetCurrentUnixTimestampMillis(creationTime.ToUniversalTime()), Convert.ToBase64String(Data));
+                    default:
+                        throw new ArgumentOutOfRangeException();
+                }
+            }
+            else
+            {
+                return string.Format("Time:{0:dd.MM.yyyy.HH-mm-ss}; Timestamp:{1}; Data:[{2}];", creationTime, GetCurrentUnixTimestampMillis(creationTime.ToUniversalTime()), BitConverter.ToString(Data));
+            }
+        }
+        
+        
+        private static long GetCurrentUnixTimestampMillis(DateTime time)
+        {
+            return (long) (time - UnixEpoch).TotalMilliseconds;
         }
     }
 }
