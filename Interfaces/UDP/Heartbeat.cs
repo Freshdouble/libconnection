@@ -32,6 +32,8 @@ namespace Heartbeat
             this.timeout = timeout;
         }
 
+        public bool Verbose { get; set; } = true;
+
         public void AddStaticEndpoint(IPEndPoint endpoint)
         {
             lock (staticEndpoints)
@@ -59,7 +61,10 @@ namespace Heartbeat
                 else if(!staticEndpoints.Contains(ep))
                 {
                     epMap.Add(ep, timestamp);
-                    Console.WriteLine("[HeartbeatManager] Port {0} connected", ep.Port);
+                    if (Verbose)
+                    {
+                        Console.WriteLine("[HeartbeatManager] Port {0} connected", ep.Port);
+                    }
                 }
             }
         }
@@ -76,7 +81,8 @@ namespace Heartbeat
 
                 foreach (KeyValuePair<IPEndPoint, DateTime> pair in epMap)
                 {
-                    if ((DateTime.Now - pair.Value).Milliseconds < this.timeout)
+                    double diff = (DateTime.UtcNow - pair.Value.ToUniversalTime()).TotalMilliseconds;
+                    if (diff < this.timeout)
                     {
                         // Still valid
                         returnList.Add(pair.Key);
@@ -85,7 +91,10 @@ namespace Heartbeat
                     {
                         // Invalid
                         removeList.Add(pair.Key);
-                        Console.WriteLine("[HeartbeatManager] Port {0} timed out!", pair.Key.Port);
+                        if (Verbose)
+                        {
+                            Console.WriteLine("[HeartbeatManager] Port {0} timed out!", pair.Key.Port);
+                        }
                     }
                 }
                 foreach(var pair in removeList)
