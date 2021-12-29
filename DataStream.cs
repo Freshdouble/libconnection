@@ -182,7 +182,7 @@ namespace libconnection
         {
             if (Exception.Count > 0)
             {
-                List<Exception> exceptions = Exception.Copy();
+                List<Exception> exceptions = new List<Exception>(Exception);
                 ClearExceptions();
                 throw new AggregateException(exceptions);
             }
