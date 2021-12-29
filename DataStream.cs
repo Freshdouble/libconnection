@@ -1,5 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace libconnection
 {
@@ -179,7 +182,7 @@ namespace libconnection
         {
             if (Exception.Count > 0)
             {
-                List<Exception> exceptions = new List<Exception>(Exception);
+                List<Exception> exceptions = Exception.Copy();
                 ClearExceptions();
                 throw new AggregateException(exceptions);
             }

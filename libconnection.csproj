@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="libsmp\C#\libsmp\libsmp.csproj" />
+    <ProjectReference Include="xcode\libxcmparse\libxcmparse.csproj" />
   </ItemGroup>
 
 </Project>
