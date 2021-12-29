@@ -1,6 +1,3 @@
 [submodule "libsmp"]
 	path = libsmp
 	url = https://github.com/Freshdouble/libsmp
-[submodule "xcode"]
-	path = xcode
-	url = https://github.com/SpaceTeam/xcode
