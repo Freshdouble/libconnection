@@ -26,9 +26,27 @@ namespace libconnection.Interfaces
         private Timer heartbeatTimer = new Timer(50);
 
         private HeartbeatManager heartbeatmanager = new HeartbeatManager(1000);
+        private bool sendheartbeat;
+
+        public static UDPServer GenerateClassFromString(string[] parameter)
+        {
+            bool sendheartbeat = false;
+            if(parameter.Length < 2)
+            {
+                throw new ArgumentException("A valid endpoint must have an ip address and port");
+            }
+
+            if(parameter.Length >= 3)
+            {
+                sendheartbeat = parameter[0].ToLower() == "true";
+            }
+
+            return new UDPServer(new IPEndPoint(IPAddress.Parse(parameter[0]), int.Parse(parameter[1])), sendheartbeat);
+        }
 
         public UDPServer(IPEndPoint endpoint, bool sendheartbeat)
         {
+            this.sendheartbeat = sendheartbeat;
             localEndpoint = endpoint;
             if (sendheartbeat)
             {

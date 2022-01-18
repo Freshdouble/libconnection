@@ -13,7 +13,7 @@ namespace libconnection
 
         public override bool SupportsUpstream => true;
 
-        private SemaphoreSlim semaphore = new SemaphoreSlim(0, 1);
+        private SemaphoreSlim semaphore = new SemaphoreSlim(0);
 
         public override void PublishUpstreamData(Message data)
         {
@@ -22,10 +22,7 @@ namespace libconnection
                 messages.Enqueue(data);
             }
             base.PublishUpstreamData(data);
-            if (semaphore.CurrentCount == 0)
-            {
-                semaphore.Release();
-            }
+            semaphore.Release();
         }
 
         public override void PublishException(IEnumerable<Exception> list)
@@ -60,6 +57,16 @@ namespace libconnection
             else
             {
                 throw new TimeoutException();
+            }
+        }
+
+        public async Task<Message> ReadMessageAsync(CancellationToken token)
+        {
+            await semaphore.WaitAsync(token);
+            lock (messages)
+            {
+                ThrowIfException();
+                return messages.Dequeue();
             }
         }
     }

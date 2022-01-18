@@ -24,6 +24,37 @@ namespace libconnection.Interfaces
 
         public bool SynchronizeContext { get; set; } = true;
 
+        public static SerialPortConnection GenerateClassFromString(string[] parameter)
+        {
+            if(parameter.Length == 0)
+            {
+                throw new ArgumentException("A valid com port must be given");
+            }
+            int baud = 115200;
+            Parity parity = Parity.None;
+            int databits = 8;
+            StopBits stopBits = StopBits.One;
+
+            if(parameter.Length >= 2)
+            {
+                baud = int.Parse(parameter[1]);
+            }
+            if (parameter.Length >= 3)
+            {
+                parity = Enum.Parse<Parity>(parameter[2], true);
+            }
+            if(parameter.Length >= 4)
+            {
+                databits = int.Parse(parameter[3]);
+            }
+            if(parameter.Length >= 5)
+            {
+                stopBits = Enum.Parse<StopBits>(parameter[4], true);
+            }
+
+            return new SerialPortConnection(new SerialPort(parameter[0], baud, parity, databits, stopBits));
+        }
+
         public SerialPortConnection(SerialPort port)
         {
             CancellationToken token = cts.Token;
