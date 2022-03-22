@@ -7,12 +7,17 @@ namespace libconnection.Decoders
 {
     public class SMPDecoder : DataStream
     {
-        private ManagedSMP smp = new ManagedSMP();
+        private readonly SMP smp = new ManagedSMP();
 
         public SMPDecoder()
         {
-
+            
         }
+
+        public Type SMPLibrayType => smp.GetType();
+
+        public uint ReceiveErrors { get => smp.ReceiveErrors; }
+        public uint ReceivedMessages { get => smp.ReceivedMessages; }
 
         public override bool SupportsDownstream => true;
 
@@ -35,6 +40,7 @@ namespace libconnection.Decoders
 
         public override void Dispose()
         {
+            GC.SuppressFinalize(this);
             smp.Dispose();
             base.Dispose();
         }
