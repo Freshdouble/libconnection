@@ -30,10 +30,10 @@ namespace libconnection.Interfaces.UDP
 
             if (localEndpoint != null)
             {
+                socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.ReuseAddress, true);
+                socket.Bind(localEndpoint);
                 receiverTask = Task.Run(async () =>
                 {
-                    socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.ReuseAddress, true);
-                    socket.Bind(localEndpoint);
                     IPEndPoint anyendpoint = new IPEndPoint(IPAddress.Any, 0);
                     var token = cts.Token;
                     TaskCompletionSource<bool> tcs = new TaskCompletionSource<bool>();
