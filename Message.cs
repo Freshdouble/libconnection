@@ -139,7 +139,7 @@ namespace libconnection
         }
         
         
-        private static long GetCurrentUnixTimestampMillis(DateTime time)
+        public static long GetCurrentUnixTimestampMillis(DateTime time)
         {
             return (long) (time - UnixEpoch).TotalMilliseconds;
         }
