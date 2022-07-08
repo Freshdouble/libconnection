@@ -46,12 +46,15 @@ namespace libconnection
 
         public override void StartService()
         {
-            if(TopElement.SupportsUpstream)
+            if (TopElement != null)
             {
-                TopElement.LinkUpstream(this);
-                IsConnected = true;
+                if (TopElement.SupportsUpstream)
+                {
+                    TopElement.LinkUpstream(this);
+                    IsConnected = true;
+                }
+                TopElement.StartService();
             }
-            TopElement?.StartService();
         }
     }
 }
