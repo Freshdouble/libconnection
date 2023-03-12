@@ -26,15 +26,25 @@ namespace libconnection
 
         public DataStream TopElement { get => streams.Count > 0 ? streams[streams.Count - 1] : null; }
 
-        public override bool SupportsUpstream => false;
         public string Name { get; set; } = string.Empty;
 
         public List<object> AdditionalData { get; } = new List<object>();
 
         public void Add(DataStream stream)
         {
-            TopElement?.LinkUpstream(stream);
-            streams.Add(stream);
+            if(TopElement == null)
+            {
+                if(!stream.IsInterface)
+                {
+                    throw new InvalidOperationException("The first element in the pipe must be a interface");
+                }
+                streams.Add(stream);
+            }
+            else
+            {
+                TopElement.AddReceiverStage(stream);
+                streams.Add(stream);
+            }
         }
 
         public override void Dispose()
@@ -43,15 +53,5 @@ namespace libconnection
         }
         
         public bool IsConnected {get; private set;} = false;
-
-        public override void StartService()
-        {
-            if(TopElement.SupportsUpstream)
-            {
-                TopElement.LinkUpstream(this);
-                IsConnected = true;
-            }
-            TopElement?.StartService();
-        }
     }
 }

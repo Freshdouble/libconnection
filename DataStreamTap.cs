@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -9,63 +10,43 @@ namespace libconnection
     public class DataStreamTap : DataStream
     {
         private Queue<Message> messages = new Queue<Message>();
-        public override bool SupportsDownstream => true;
-
-        public override bool SupportsUpstream => true;
-
         private SemaphoreSlim semaphore = new SemaphoreSlim(0);
+        public uint MaxQueueLength { get; set; } = 0;
 
-        public override void PublishUpstreamData(Message data)
-        {
-            lock (messages)
-            {
-                messages.Enqueue(data);
-            }
-            base.PublishUpstreamData(data);
-            semaphore.Release();
-        }
+        public override bool IsInterface => false;
 
-        public override void PublishException(IEnumerable<Exception> list)
+        protected override void ReceiveMessage(Message message)
         {
-            base.PublishException(list);
-            if (semaphore.CurrentCount == 0)
-            {
-                semaphore.Release();
-            }
-        }
-
-        public async Task<Message> ReadMessageAsync()
-        {
-            await semaphore.WaitAsync().ConfigureAwait(false);
-            lock (messages)
-            {
-                ThrowIfException();
-                return messages.Dequeue();
-            }
-        }
-
-        public async Task<Message> ReadMessageAsync(int timeout)
-        {
-            if(await semaphore.WaitAsync(timeout))
+            base.ReceiveMessage(message);
+            if(MaxQueueLength > 0)
             {
                 lock (messages)
                 {
-                    ThrowIfException();
-                    return messages.Dequeue();
+                    while (messages.Count > MaxQueueLength)
+                    {
+                        messages.Dequeue();
+                        if(semaphore.CurrentCount== 0)
+                        {
+                            throw new Exception("Semaphore count missmatch");
+                        }
+                        semaphore.Wait();
+                    }
+                    if(semaphore.CurrentCount != messages.Count)
+                    {
+                        throw new Exception("Semaphore count missmatch");
+                    }
+                    messages.Enqueue(message);
+                    semaphore.Release();
                 }
-            }
-            else
-            {
-                throw new TimeoutException();
             }
         }
 
-        public async Task<Message> ReadMessageAsync(CancellationToken token)
+        
+        public async Task<Message> ReadMessageAsync()
         {
-            await semaphore.WaitAsync(token);
-            lock (messages)
+            await semaphore.WaitAsync();
+            lock(messages)
             {
-                ThrowIfException();
                 return messages.Dequeue();
             }
         }

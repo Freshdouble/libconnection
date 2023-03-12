@@ -19,23 +19,20 @@ namespace libconnection.Decoders
         public uint ReceiveErrors { get => smp.ReceiveErrors; }
         public uint ReceivedMessages { get => smp.ReceivedMessages; }
 
-        public override bool SupportsDownstream => true;
+        public override bool IsInterface => false;
 
-        public override bool SupportsUpstream => true;
-
-        public override void PublishUpstreamData(Message data)
+        protected override void ReceiveMessage(Message message)
         {
-            //Try decode
-            smp.ProcessBytes(data.Data);
+            smp.ProcessBytes(message.Data);
             while(smp.StoredMessages > 0)
             {
-                base.PublishUpstreamData(new Message(smp.GetMessage()));
+                base.ReceiveMessage(new Message(smp.GetMessage()));
             }
         }
 
-        public override void PublishDownstreamData(Message data)
+        public override void TransmitMessage(Message message)
         {
-            base.PublishDownstreamData(new Message(smp.GenerateMessage(data.Data)));
+            base.TransmitMessage(new Message(smp.GenerateMessage(message.Data)));
         }
 
         public override void Dispose()

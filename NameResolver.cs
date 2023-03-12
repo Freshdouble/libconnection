@@ -17,13 +17,16 @@ namespace libconnection
             {
                 case "udpserver":
                     return UDPServer.GenerateClassFromString(initialization.ToArray());
-                case "udpreceiver":
-                    return UdpReceiver.GenerateClassFromString(initialization.ToArray());
+                case "udp":
+                case "udptransceiver":
+                    return UdpTransceiver.GenerateClassFromString(initialization.ToArray());
                 case "serial":
                 case "serialport":
                     return SerialPortConnection.GenerateClassFromString(initialization.ToArray());
                 case "smp":
                     return new SMPDecoder();
+                case "console":
+                    return new console();
             }
             return null;
         }

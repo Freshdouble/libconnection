@@ -11,9 +11,6 @@ namespace libconnection.Interfaces
     public class CANInterface : DataStream
     {
         private CAN can;
-        public override bool SupportsDownstream => false;
-
-        public override bool SupportsUpstream => true;
 
         private Task receiveTask = null;
         private CancellationTokenSource cts = new CancellationTokenSource();
@@ -38,7 +35,7 @@ namespace libconnection.Interfaces
                         AddressMessage addrrmessage = new AddressMessage(data);
                         byte[] idBytes = new byte[] { (byte)(canID >> 8), (byte)(canID & 0xFF) };
                         addrrmessage.Addresses.Add(idBytes);
-                        base.PublishUpstreamData(addrrmessage);
+                        base.TransmitMessage(addrrmessage);
                     }
                     catch(Exception ex)
                     {
@@ -46,7 +43,7 @@ namespace libconnection.Interfaces
                             throw;
                         else
                         {
-                            base.PublishException(ex);
+                            base.ThrowCriticalException(ex);
                         }
                     }
                 }
@@ -54,6 +51,8 @@ namespace libconnection.Interfaces
         }
 
         public int CANSendAddress { get; set; } = -1;
+
+        public override bool IsInterface => true;
 
         public override void Dispose()
         {
@@ -71,13 +70,13 @@ namespace libconnection.Interfaces
             base.Dispose();
         }
 
-        public override void PublishDownstreamData(Message data)
+        public override void TransmitMessage(Message message)
         {
             int address = CANSendAddress;
-            if (data is AddressMessage addrmessage)
+            if (message is AddressMessage addrmessage)
             {
                 byte[] addrbytes = addrmessage.Addresses[0];
-                if(addrbytes.Length == 2)
+                if (addrbytes.Length == 2)
                 {
                     address = addrbytes[0] << 8 | addrbytes[1];
                 }
@@ -87,7 +86,7 @@ namespace libconnection.Interfaces
                 }
                 var leftAddresses = addrmessage.Addresses.Skip(1).ToList();
                 addrmessage.Addresses.Clear();
-                if(leftAddresses.Count > 0)
+                if (leftAddresses.Count > 0)
                 {
                     addrmessage.Addresses.AddRange(leftAddresses);
                 }
@@ -97,8 +96,8 @@ namespace libconnection.Interfaces
             {
                 throw new ArgumentException("No CAN Address provided");
             }
-            
-            if(can.Send(address, data) != data.Length)
+
+            if (can.Send(address, message) != message.Length)
             {
                 throw new ArgumentException("No data was sent");
             }

@@ -10,11 +10,13 @@ using Timer = System.Timers.Timer;
 
 namespace libconnection.Interfaces.UDP
 {
-    public abstract class UdpTransceiver : DataStream
+    public class UdpTransceiver : DataStream
     {
         public IPEndPoint RemoteEndpoint { get; set; }
 
         public bool UseShortHeader { get; set; } = true;
+
+        public override bool IsInterface => true;
 
         private Timer heartbeatTimer = new Timer(100);
 
@@ -57,26 +59,12 @@ namespace libconnection.Interfaces.UDP
                                         Package data = Package.parse(buffer.Take(receiveFromResult.ReceivedBytes));
                                         if (data.type == Package.Type.DATAFRAME)
                                         {
-                                            if (SupportsUpstream)
-                                            {
-                                                base.PublishUpstreamData(new Message(data.payload));
-                                            }
-                                            else
-                                            {
-                                                base.PublishDownstreamData(new Message(data.payload));
-                                            }
+                                            base.ReceiveMessage(new Message(data.payload));
                                         }
                                     }
                                     else
                                     {
-                                        if (SupportsUpstream)
-                                        {
-                                            base.PublishUpstreamData(new Message(buffer.Take(receiveFromResult.ReceivedBytes)));
-                                        }
-                                        else
-                                        {
-                                            base.PublishDownstreamData(new Message(buffer.Take(receiveFromResult.ReceivedBytes)));
-                                        }
+                                        base.ReceiveMessage(new Message(buffer.Take(receiveFromResult.ReceivedBytes)));
                                     }
                                 }
                             }
@@ -98,62 +86,26 @@ namespace libconnection.Interfaces.UDP
             }
         }
 
-        public override void PublishDownstreamData(Message data)
+        public override void TransmitMessage(Message message)
         {
+            base.TransmitMessage(message);
             if (cts == null)
             {
-                throw new ObjectDisposedException(nameof(UdpReceiver));
+                throw new ObjectDisposedException("UDPTransceiver is disposed");
             }
-            if (SupportsDownstream)
+            if (RemoteEndpoint != null)
             {
-                base.PublishDownstreamData(data);
-            }
-            else
-            {
-                if (RemoteEndpoint != null)
+                if (useserverprotocoll)
                 {
-                    if (useserverprotocoll)
+                    Package packeddata = new Package(Package.Type.DATAFRAME, DateTime.Now, message.Data)
                     {
-                        Package packeddata = new Package(Package.Type.DATAFRAME, DateTime.Now, data.Data)
-                        {
-                            UseShortHeader = UseShortHeader
-                        };
-                        socket.SendTo(packeddata.Serialize(), SocketFlags.None, RemoteEndpoint);
-                    }
-                    else
-                    {
-                        socket.SendTo(data.Data, SocketFlags.None, RemoteEndpoint);
-                    }
+                        UseShortHeader = UseShortHeader
+                    };
+                    socket.SendTo(packeddata.Serialize(), SocketFlags.None, RemoteEndpoint);
                 }
-            }
-        }
-
-        public override void PublishUpstreamData(Message data)
-        {
-            if (cts == null)
-            {
-                throw new ObjectDisposedException(nameof(UdpReceiver));
-            }
-            if (SupportsUpstream)
-            {
-                base.PublishUpstreamData(data);
-            }
-            else
-            {
-                if (RemoteEndpoint != null)
+                else
                 {
-                    if (useserverprotocoll)
-                    {
-                        Package packeddata = new Package(Package.Type.DATAFRAME, DateTime.Now, data.Data)
-                        {
-                            UseShortHeader = UseShortHeader
-                        };
-                        socket.SendTo(packeddata.Serialize(), SocketFlags.None, RemoteEndpoint);
-                    }
-                    else
-                    {
-                        socket.SendTo(data.Data, SocketFlags.None, RemoteEndpoint);
-                    }
+                    socket.SendTo(message.Data, SocketFlags.None, RemoteEndpoint);
                 }
             }
         }

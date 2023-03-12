@@ -15,9 +15,6 @@ namespace libconnection.Interfaces
 {
     public class UDPServer : DataStream
     {
-        public override bool SupportsDownstream => true;
-
-        public override bool SupportsUpstream => false;
 
         private Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
         private EndPoint localEndpoint;
@@ -54,58 +51,7 @@ namespace libconnection.Interfaces
                 heartbeatTimer.AutoReset = true;
                 heartbeatTimer.Enabled = true;
             }
-        }
 
-        public UDPServer(IPEndPoint endpoint, IEnumerable<IPEndPoint> staticEndpoints, bool sendheartbeat) : this(endpoint, sendheartbeat)
-        {
-            foreach(var staticendpoint in staticEndpoints)
-            {
-                AddStaticEndpoint(staticendpoint);
-            }
-        }
-
-        public void AddStaticEndpoint(IPEndPoint endpoint)
-        {
-            heartbeatmanager.AddStaticEndpoint(endpoint);
-        }
-
-        public bool UseShortHeader { get; set; } = false;
-
-        private void SocketSend(ref Package package, IPEndPoint endPoint)
-        {
-            SocketSend(package.Serialize(), endPoint);
-        }
-
-        private void SocketSend(byte[] data, IPEndPoint endPoint)
-        {
-            try
-            {
-                socket.SendTo(data, endPoint);
-            }
-            catch (SocketException)
-            {
-
-            }
-            catch (Exception ex)
-            {
-                PublishException(ex);
-            }
-        }
-
-        private void HeartbeatTimer_Elapsed(object sender, ElapsedEventArgs e)
-        {
-            Package package = Package.CreateHeartbeat();
-            package.UseShortHeader = UseShortHeader;
-            List<IPEndPoint> endpoints = heartbeatmanager.retrieve(false);
-            byte[] data = package.Serialize();
-            foreach(var endpoint in endpoints)
-            {
-                SocketSend(data, endpoint);
-            }
-        }
-
-        public override void StartService()
-        {
             socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.ReuseAddress, true);
             socket.Bind(localEndpoint);
             receiveTask = Task.Factory.StartNew(async () =>
@@ -131,7 +77,7 @@ namespace libconnection.Interfaces
                                 heartbeatmanager.beat((IPEndPoint)receiveFromResult.RemoteEndPoint, DateTime.Now);
                                 if (data.type == Package.Type.DATAFRAME)
                                 {
-                                    PublishDownstreamData(new Message(data.payload));
+                                    base.ReceiveMessage(new Message(data.payload));
                                 }
                             }
                         }
@@ -141,7 +87,56 @@ namespace libconnection.Interfaces
                 {
                 }
             }, TaskCreationOptions.LongRunning);
-            base.StartService();
+        }
+
+        public UDPServer(IPEndPoint endpoint, IEnumerable<IPEndPoint> staticEndpoints, bool sendheartbeat) : this(endpoint, sendheartbeat)
+        {
+            foreach(var staticendpoint in staticEndpoints)
+            {
+                AddStaticEndpoint(staticendpoint);
+            }
+        }
+
+        public void AddStaticEndpoint(IPEndPoint endpoint)
+        {
+            heartbeatmanager.AddStaticEndpoint(endpoint);
+        }
+
+        public bool UseShortHeader { get; set; } = false;
+
+        public override bool IsInterface => true;
+
+        private void SocketSend(ref Package package, IPEndPoint endPoint)
+        {
+            SocketSend(package.Serialize(), endPoint);
+        }
+
+        private void SocketSend(byte[] data, IPEndPoint endPoint)
+        {
+            try
+            {
+                socket.SendTo(data, endPoint);
+            }
+            catch (SocketException)
+            {
+
+            }
+            catch (Exception)
+            {
+                throw;
+            }
+        }
+
+        private void HeartbeatTimer_Elapsed(object sender, ElapsedEventArgs e)
+        {
+            Package package = Package.CreateHeartbeat();
+            package.UseShortHeader = UseShortHeader;
+            List<IPEndPoint> endpoints = heartbeatmanager.retrieve(false);
+            byte[] data = package.Serialize();
+            foreach(var endpoint in endpoints)
+            {
+                SocketSend(data, endpoint);
+            }
         }
 
         private void SendToAll(Package package)
@@ -158,9 +153,10 @@ namespace libconnection.Interfaces
             }
         }
 
-        public override void PublishUpstreamData(Message data)
+        public override void TransmitMessage(Message message)
         {
-            Package package = new Package(Package.Type.DATAFRAME, DateTime.Now, data.Data)
+            base.TransmitMessage(message);
+            Package package = new Package(Package.Type.DATAFRAME, DateTime.Now, message.Data)
             {
                 UseShortHeader = UseShortHeader
             };

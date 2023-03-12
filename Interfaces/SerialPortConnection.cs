@@ -13,9 +13,6 @@ namespace libconnection.Interfaces
         private SerialPort port = null;
         private Task workingTask;
         private bool disposed = false;
-        public override bool SupportsDownstream => false;
-
-        public override bool SupportsUpstream => true;
 
         public SerialPortConnection(string portname, int baudrate = 115200, Parity parity = Parity.None, int databits = 8, StopBits stopBits = StopBits.One) :
             this(new SerialPort(portname, baudrate, parity, databits, stopBits))
@@ -23,6 +20,8 @@ namespace libconnection.Interfaces
         }
 
         public bool SynchronizeContext { get; set; } = true;
+
+        public override bool IsInterface => true;
 
         public static SerialPortConnection GenerateClassFromString(string[] parameter)
         {
@@ -91,7 +90,7 @@ namespace libconnection.Interfaces
                                 token.ThrowIfCancellationRequested();
                                 ExecutionContext.Run(ec, (context) =>
                                 {
-                                    base.PublishUpstreamData(msg as Message);
+                                    base.ReceiveMessage(msg);
                                     if (sslm.CurrentCount == 0)
                                     {
                                         sslm.Release();
@@ -100,7 +99,7 @@ namespace libconnection.Interfaces
                             }
                             else
                             {
-                                base.PublishUpstreamData(msg);
+                                base.ReceiveMessage(msg);
                             }
                         }
                     }
@@ -114,7 +113,7 @@ namespace libconnection.Interfaces
             this.port = port;
         }
 
-        public override void PublishDownstreamData(Message data)
+        public override void TransmitMessage(Message data)
         {
             byte[] msg = data.Data;
             port.Write(msg, 0, msg.Length);

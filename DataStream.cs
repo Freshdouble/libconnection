@@ -11,205 +11,111 @@ namespace libconnection
         public Message Message { get; set; }
     }
 
-    public abstract class DataStream : IDisposable, IStartable
+    public class ExceptionEventArgs : EventArgs
     {
-        private LinkedList<DataStream> uplink = new LinkedList<DataStream>();
-        private LinkedList<DataStream> downlink = new LinkedList<DataStream>();
+        public AggregateException Exception { get; set; }
+    }
+
+    public abstract class DataStream : IDisposable
+    {
+        protected DataStream receiver;
+        protected DataStream transmitter;
         public event EventHandler<MessageEventArgs> MessageReceived;
+        public event EventHandler<ExceptionEventArgs> ExceptionReceived;
+        public event EventHandler<EventArgs> BrokenPipe;
+
         public DataStream()
         {
         }
 
-        public abstract bool SupportsDownstream { get; }
-        public abstract bool SupportsUpstream { get; }
+        public abstract bool IsInterface { get; }
 
-        public int FilterPort { get; set; } = -1;
-
-        private IEnumerable<DataStream> GetUplinks()
+        public virtual void AddReceiverStage(DataStream stage, bool overwrite = false)
         {
-            lock (uplink)
+            if(!overwrite && receiver != null)
             {
-                foreach (var link in uplink)
+                throw new ArgumentException("Stage already has a upperstage");
+            }
+            receiver = stage;
+        }
+
+        public virtual void AddTransmitterStage(DataStream stage, bool overwrite = false)
+        {
+            if(IsInterface)
+            {
+                throw new InvalidOperationException("Cannot add a transmitter stage to a transmitter");
+            }
+            if (!overwrite && transmitter != null)
+            {
+                throw new ArgumentException("Stage already has a upperstage");
+            }
+            transmitter = stage;
+        }
+
+        public bool PipeIsBroken { get; protected set; } = false;
+        public List<Exception> ThrownExceptions { get; } = new ();
+
+        public virtual void TransmitMessage(Message message)
+        {
+            if(PipeIsBroken)
+            {
+                throw new InvalidOperationException("Cannot write to a broken pipe");
+            }
+            else if(!IsInterface && transmitter == null)
+            {
+                throw new InvalidOperationException("Cannot transmit a message on a pipe with no interface");
+            }
+
+            try
+            {
+                transmitter?.TransmitMessage(message);
+            }
+            catch(Exception ex)
+            {
+                ThrowCriticalException(ex);
+            }
+        }
+
+        protected virtual void ReceiveMessage(Message message)
+        {
+            if (PipeIsBroken)
+            {
+                throw new InvalidOperationException("Cannot write to a broken pipe");
+            }
+            try
+            {
+                receiver?.ReceiveMessage(message);
+                MessageReceived?.Invoke(this, new MessageEventArgs()
                 {
-                    yield return link;
-                }
+                    Message = message
+                });
+            }
+            catch (Exception ex)
+            {
+                ThrowCriticalException(ex);
             }
         }
 
-        private IEnumerable<DataStream> GetDownlinks()
+        protected void ThrowUncriticalExcpeption(Exception ex)
         {
-            lock (downlink)
+            ThrownExceptions.Add(ex);
+            ExceptionReceived?.Invoke(this, new ExceptionEventArgs
             {
-                foreach (var link in downlink)
-                {
-                    yield return link;
-                }
-            }
-        }
-
-        public virtual void LinkUpstream(DataStream stream)
-        {
-            if (!SupportsUpstream)
-            {
-                throw new InvalidOperationException("Cannot link a upstream interface to " + GetType().Name);
-            }
-            lock (uplink)
-            {
-                uplink.AddLast(stream);
-            }
-            if (stream.SupportsDownstream)
-            {
-                stream.LinkDownstream(this);
-            }
-        }
-
-        public void UnlinkUpstream(DataStream stream)
-        {
-            lock (uplink)
-            {
-                uplink.Remove(stream);
-            }
-            stream.UnlinkDownstream(this);
-        }
-
-        protected void LinkDownstream(DataStream stream)
-        {
-            if (!SupportsDownstream)
-            {
-                throw new InvalidOperationException("Cannot link a downstream interface to " + GetType().Name);
-            }
-            lock (uplink)
-            {
-                downlink.AddLast(stream);
-            }
-        }
-
-        protected void UnlinkDownstream(DataStream stream)
-        {
-            if (SupportsDownstream)
-            {
-                lock (uplink)
-                {
-                    downlink.Remove(stream);
-                }
-            }
-        }
-
-        private void PushDataUpstream(Message data)
-        {
-            if (FilterPort >= 0)
-            {
-                if (FilterPort == data.Port)
-                {
-                    PublishUpstreamData(data);
-                }
-            }
-            else
-            {
-                PublishUpstreamData(data);
-            }
-        }
-
-        public virtual void PublishUpstreamData(Message data)
-        {
-            if (SupportsUpstream)
-            {
-                var upstreamlinks = GetUplinks();
-                foreach (var stream in upstreamlinks)
-                {
-                    stream.PushDataUpstream(data);
-                }
-            }
-            MessageReceived?.Invoke(this, new MessageEventArgs()
-            {
-                Message = data
+                Exception = new AggregateException(ThrownExceptions)
             });
         }
 
-        public virtual void PublishDownstreamData(Message data)
+        protected void ThrowCriticalException(Exception ex)
         {
-            if (SupportsDownstream)
-            {
-                if (FilterPort >= 0)
-                {
-                    data.Port = FilterPort;
-                }
-                var downlinks = GetDownlinks();
-                foreach (var stream in downlinks)
-                {
-                    stream.PublishDownstreamData(data);
-                }
-            }
-        }
-
-        public List<Exception> Exception { get; } = new List<Exception>();
-
-        public void PublishException(Exception ex)
-        {
-            PublishException(new Exception[] { ex });
-        }
-
-        public virtual void PublishException(IEnumerable<Exception> list)
-        {
-            if (Exception != null)
-            {
-                Exception.AddRange(list);
-            }
-            if (SupportsUpstream)
-            {
-                var upstreamlinks = GetUplinks();
-                foreach (var stream in upstreamlinks)
-                {
-                    stream.PublishException(Exception);
-                }
-            }
-        }
-
-        private void ClearExceptions()
-        {
-            Exception.Clear();
-            if (SupportsDownstream)
-            {
-                var downlinks = GetDownlinks();
-                foreach (var stream in downlinks)
-                {
-                    stream.ClearExceptions();
-                }
-            }
-        }
-
-        public void ThrowIfException()
-        {
-            if (Exception.Count > 0)
-            {
-                List<Exception> exceptions = new List<Exception>(Exception);
-                ClearExceptions();
-                throw new AggregateException(exceptions);
-            }
+            PipeIsBroken = true;
+            ThrowUncriticalExcpeption(ex);
+            BrokenPipe?.Invoke(this, new EventArgs());
         }
 
         public virtual void Dispose()
         {
-            if (SupportsDownstream)
-            {
-                var downlinks = GetDownlinks();
-                foreach (var stream in downlinks)
-                {
-                    stream.Dispose();
-                }
-            }
-        }
-
-        public virtual void StartService()
-        {
-            if (SupportsDownstream)
-            {
-                var downlinks = GetDownlinks();
-                foreach (var stream in downlinks)
-                {
-                    stream.StartService();
-                }
-            }
+            receiver?.Dispose();
+            transmitter?.Dispose();
         }
     }
 }

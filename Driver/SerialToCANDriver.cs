@@ -18,9 +18,6 @@ namespace libconnection.Driver
      * ************************************************/
     public class SerialToCANDriver : DataStream
     {
-        public override bool SupportsDownstream => true;
-
-        public override bool SupportsUpstream => true;
 
         private bool filteractivated = false;
 
@@ -56,6 +53,8 @@ namespace libconnection.Driver
             }
         }
 
+        public override bool IsInterface => false;
+
         private void SendBridgeMessage(SerialToCANMessageType type, IEnumerable<byte> msg)
         {
             SendBridgeMessage(type, new Message(msg));
@@ -81,50 +80,45 @@ namespace libconnection.Driver
                     break;
             }
             msg.PushFront((byte)type);
-            base.PublishDownstreamData(msg);
-        }
-        public override void PublishDownstreamData(Message data)
-        {
-            if (data.Length > CANMaxMessageLength)
-            {
-                PublishException(new ArgumentException("The can device can not handle messages that are larger than " + CANMaxMessageLength.ToString() + " byte"));
-            }
-            else
-            {
-                SendBridgeMessage(SerialToCANMessageType.Data, data);
-            }
+            base.TransmitMessage(msg);
         }
 
-        public override void PublishUpstreamData(Message data)
+        public override void TransmitMessage(Message message)
         {
-            SerialToCANMessageType messageType = (SerialToCANMessageType)data.PopFirst();
+            SerialToCANMessageType messageType = (SerialToCANMessageType)message.PopFirst();
             switch (messageType)
             {
                 case SerialToCANMessageType.Filter:
                     break;
                 case SerialToCANMessageType.Data:
-                    byte[] canaddress = new byte[] { data.PopFirst(), data.PopFirst() };
-                    if(UseSoftwareFilter)
+                    byte[] canaddress = new byte[] { message.PopFirst(), message.PopFirst() };
+                    if (UseSoftwareFilter)
                     {
                         CANAddress addr = CANAddress.GetFromArray(canaddress);
-                        if(addr != FilterAddress)
+                        if (addr != FilterAddress)
                         {
                             return;
                         }
                     }
-                    AddressMessage msg = new AddressMessage(data);
+                    AddressMessage msg = new AddressMessage(message);
                     msg.Addresses.Add(canaddress);
-                    base.PublishUpstreamData(msg);
+                    base.TransmitMessage(msg);
                     break;
                 default:
                     break;
             }
         }
 
-        public override void StartService()
+        protected override void ReceiveMessage(Message message)
         {
-            base.StartService();
-            SendBridgeMessage(SerialToCANMessageType.Filter, new byte[] { 0xFF, 0xFF });
+            if (message.Length > CANMaxMessageLength)
+            {
+                ThrowUncriticalExcpeption(new ArgumentException("The can device can not handle messages that are larger than " + CANMaxMessageLength.ToString() + " byte"));
+            }
+            else
+            {
+                SendBridgeMessage(SerialToCANMessageType.Data, message);
+            }
         }
     }
 }
