@@ -8,7 +8,7 @@ namespace libconnection.Interfaces
 {
     public class console : DataStream
     {
-        public override bool IsInterface => false;
+        public override bool IsInterface => true;
 
         public override void TransmitMessage(Message msg)
         {

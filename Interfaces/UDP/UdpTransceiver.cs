@@ -25,6 +25,43 @@ namespace libconnection.Interfaces.UDP
         private CancellationTokenSource cts = new CancellationTokenSource();
         private bool useserverprotocoll;
 
+        public static UdpTransceiver GenerateWithParameters(IDictionary<string, string> parameter)
+        {
+            bool sendheartbeat = false;
+
+            IPEndPoint local = null;
+            if(parameter.ContainsKey("localendpoint"))
+            {
+                if (!IPEndPoint.TryParse(parameter["localendpoint"], out local))
+                {
+                    throw new NotImplementedException("DNS resolve will be added later");
+                }
+            }
+
+            IPEndPoint remote = null;
+            if(parameter.ContainsKey("remoteendpoint"))
+            {
+                if (!IPEndPoint.TryParse(parameter["remoteendpoint"], out remote))
+                {
+                    throw new NotImplementedException("DNS resolve will be added later");
+                }
+            }
+            else
+            {
+                throw new ArgumentException("The udptransceiver must have a remote endpoint");
+            }
+
+            bool sendHeartbeat = false;
+            bool useserverprotocol = false;
+
+            if(parameter.ContainsKey("serverregistration"))
+            {
+                sendHeartbeat = useserverprotocol = parameter["serverregistration"].ToLower() == "true";
+            }
+
+            return new UdpTransceiver(local, remote, sendheartbeat, useserverprotocol);
+        }
+
         public UdpTransceiver(IPEndPoint localEndpoint, IPEndPoint remoteEndpoint = null, bool sendHeartbeat = false, bool useserverprotocoll = false)
         {
             this.useserverprotocoll = useserverprotocoll;

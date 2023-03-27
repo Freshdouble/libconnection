@@ -11,18 +11,19 @@ namespace libconnection
 {
     public class NameResolver
     {
-        public static DataStream GetStreamByName(string name, IEnumerable<string> initialization)
+        public static DataStream GetStreamByName(string name, IDictionary<string, string> initialization)
         {
             switch(name.ToLower())
             {
+                /*
                 case "udpserver":
-                    return UDPServer.GenerateClassFromString(initialization.ToArray());
+                    return UDPServer.GenerateWithParameters(initialization.ToArray());*/
                 case "udp":
                 case "udptransceiver":
-                    return UdpTransceiver.GenerateClassFromString(initialization.ToArray());
+                    return UdpTransceiver.GenerateWithParameters(initialization);
                 case "serial":
                 case "serialport":
-                    return SerialPortConnection.GenerateClassFromString(initialization.ToArray());
+                    return SerialPortConnection.GenerateWithParameters(initialization);
                 case "smp":
                     return new SMPDecoder();
                 case "console":
