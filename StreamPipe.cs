@@ -33,16 +33,16 @@ namespace libconnection
         {
             if (TopElement == null)
             {
-                if(!stream.IsInterface)
-                {
-                    throw new InvalidOperationException("The first element in the pipe must be a interface");
-                }
                 streams.Add(stream);
             }
             else
             {
                 TopElement.MessageReceived -= TopElement_MessageReceived;
                 TopElement.AddReceiverStage(stream);
+                if(!stream.IsInterface)
+                {
+                    stream.AddTransmitterStage(TopElement);
+                }
                 streams.Add(stream);
             }
             stream.MessageReceived += TopElement_MessageReceived;

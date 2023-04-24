@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.Intrinsics.Arm;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -21,16 +22,18 @@ namespace libconnection.Interfaces.UDP
         private Timer heartbeatTimer = new Timer(100);
 
         private Task<bool> receiverTask = null;
-        private Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+        private UdpClient udp;
         private CancellationTokenSource cts = new CancellationTokenSource();
         private bool useserverprotocoll;
+        private IPEndPoint localEndpoint;
+        private UdpClient sendclient;
 
         public static UdpTransceiver GenerateWithParameters(IDictionary<string, string> parameter)
         {
             bool sendheartbeat = false;
 
             IPEndPoint local = null;
-            if(parameter.ContainsKey("localendpoint"))
+            if (parameter.ContainsKey("localendpoint"))
             {
                 if (!IPEndPoint.TryParse(parameter["localendpoint"], out local))
                 {
@@ -39,7 +42,7 @@ namespace libconnection.Interfaces.UDP
             }
 
             IPEndPoint remote = null;
-            if(parameter.ContainsKey("remoteendpoint"))
+            if (parameter.ContainsKey("remoteendpoint"))
             {
                 if (!IPEndPoint.TryParse(parameter["remoteendpoint"], out remote))
                 {
@@ -54,7 +57,7 @@ namespace libconnection.Interfaces.UDP
             bool sendHeartbeat = false;
             bool useserverprotocol = false;
 
-            if(parameter.ContainsKey("serverregistration"))
+            if (parameter.ContainsKey("serverregistration"))
             {
                 sendHeartbeat = useserverprotocol = parameter["serverregistration"].ToLower() == "true";
             }
@@ -66,53 +69,53 @@ namespace libconnection.Interfaces.UDP
         {
             this.useserverprotocoll = useserverprotocoll;
             RemoteEndpoint = remoteEndpoint;
-
+            this.localEndpoint = localEndpoint;
+            if(!useserverprotocoll)
+            {
+                sendclient = new UdpClient();
+            }
             if (localEndpoint != null)
             {
-                socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.ReuseAddress, true);
-                socket.Bind(localEndpoint);
+                udp = new UdpClient(7000);
                 receiverTask = Task.Run(async () =>
                 {
-                    IPEndPoint anyendpoint = new IPEndPoint(IPAddress.Any, 0);
                     var token = cts.Token;
-                    TaskCompletionSource<bool> tcs = new TaskCompletionSource<bool>();
-                    token.Register(() =>
-                    {
-                        tcs.SetResult(true);
-                    });
-                    byte[] buffer = new byte[100];
                     try
                     {
                         while (!token.IsCancellationRequested)
                         {
-                            var receiveTask = socket.ReceiveFromAsync(buffer, SocketFlags.None, anyendpoint);
-                            if (await Task.WhenAny(receiveTask, tcs.Task) == receiveTask)
+                            try
                             {
-                                var receiveFromResult = receiveTask.Result;
-                                if (receiveFromResult.ReceivedBytes > 0)
+                                var result = await udp.ReceiveAsync(token);
+                                if (useserverprotocoll || sendHeartbeat)
                                 {
-                                    if (useserverprotocoll || sendHeartbeat)
+                                    Package data = Package.parse(result.Buffer);
+                                    if (data.type == Package.Type.DATAFRAME)
                                     {
-                                        Package data = Package.parse(buffer.Take(receiveFromResult.ReceivedBytes));
-                                        if (data.type == Package.Type.DATAFRAME)
-                                        {
-                                            base.ReceiveMessage(new Message(data.payload));
-                                        }
-                                    }
-                                    else
-                                    {
-                                        base.ReceiveMessage(new Message(buffer.Take(receiveFromResult.ReceivedBytes)));
+                                        base.ReceiveMessage(new Message(data.payload));
                                     }
                                 }
+                                else
+                                {
+                                    base.ReceiveMessage(new Message(result.Buffer));
+                                }
+                            }
+                            catch(SocketException)
+                            {
+                                udp = new UdpClient(localEndpoint);
                             }
                         }
                         return true;
                     }
-                    catch (Exception)
+                    catch (Exception ex)
                     {
                         return false;
                     }
                 });
+            }
+            else
+            {
+                udp = new UdpClient();
             }
 
             if (sendHeartbeat)
@@ -138,11 +141,25 @@ namespace libconnection.Interfaces.UDP
                     {
                         UseShortHeader = UseShortHeader
                     };
-                    socket.SendTo(packeddata.Serialize(), SocketFlags.None, RemoteEndpoint);
+                    try
+                    {
+                        udp.Send(packeddata.Serialize(), RemoteEndpoint);
+                    }
+                    catch (SocketException)
+                    {
+                        udp = new UdpClient(localEndpoint);
+                    }
                 }
                 else
                 {
-                    socket.SendTo(message.Data, SocketFlags.None, RemoteEndpoint);
+                    try
+                    {
+                        sendclient?.Send(message.Data, RemoteEndpoint);
+                    }
+                    catch (SocketException)
+                    {
+                        sendclient = new UdpClient();
+                    }
                 }
             }
         }
@@ -152,7 +169,7 @@ namespace libconnection.Interfaces.UDP
             if (RemoteEndpoint != null)
             {
                 Package packeddata = Package.CreateHeartbeat();
-                socket.SendTo(packeddata.Serialize(), SocketFlags.None, RemoteEndpoint);
+                udp.Send(packeddata.Serialize(), RemoteEndpoint);
             }
         }
 
@@ -167,6 +184,8 @@ namespace libconnection.Interfaces.UDP
             receiverTask?.Dispose();
             cts = null;
             receiverTask = null;
+            udp?.Dispose();
+            sendclient?.Dispose();
             base.Dispose();
         }
     }

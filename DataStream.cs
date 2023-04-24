@@ -61,10 +61,6 @@ namespace libconnection
             {
                 throw new InvalidOperationException("Cannot write to a broken pipe");
             }
-            else if(!IsInterface && transmitter == null)
-            {
-                throw new InvalidOperationException("Cannot transmit a message on a pipe with no interface");
-            }
 
             try
             {
