@@ -12,7 +12,7 @@ namespace libconnection.Interfaces
         private CancellationTokenSource cts = new CancellationTokenSource();
         private SerialPort port = null;
         private Task workingTask;
-        private bool disposed = false;
+        new private bool disposed = false;
 
         public static SerialPortConnection GenerateWithParameters(IDictionary<string, string> parameters)
         {

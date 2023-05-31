@@ -28,6 +28,11 @@ namespace libconnection
                     return new SMPDecoder();
                 case "console":
                     return new console();
+                case "fileinput":
+                    return new FileInputInterface(initialization["file"]);
+                case "fileoutput":
+                    return new FileOutputInterface(initialization["file"]);
+                    
             }
             return null;
         }

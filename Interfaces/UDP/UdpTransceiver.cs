@@ -175,18 +175,21 @@ namespace libconnection.Interfaces.UDP
 
         public override void Dispose()
         {
-            heartbeatTimer?.Stop();
-            heartbeatTimer?.Dispose();
-            heartbeatTimer = null;
-            cts?.Cancel();
-            receiverTask?.Wait(1000);
-            cts?.Dispose();
-            receiverTask?.Dispose();
-            cts = null;
-            receiverTask = null;
-            udp?.Dispose();
-            sendclient?.Dispose();
-            base.Dispose();
+            if(!disposed)
+            {
+                heartbeatTimer?.Stop();
+                heartbeatTimer?.Dispose();
+                heartbeatTimer = null;
+                cts?.Cancel();
+                receiverTask?.Wait(1000);
+                cts?.Dispose();
+                receiverTask?.Dispose();
+                cts = null;
+                receiverTask = null;
+                udp?.Dispose();
+                sendclient?.Dispose();
+                base.Dispose();
+            }
         }
     }
 }

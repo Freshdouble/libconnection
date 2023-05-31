@@ -23,6 +23,7 @@ namespace libconnection
         public event EventHandler<MessageEventArgs> MessageReceived;
         public event EventHandler<ExceptionEventArgs> ExceptionReceived;
         public event EventHandler<EventArgs> BrokenPipe;
+        protected bool disposed = false;
 
         public DataStream()
         {
@@ -110,8 +111,12 @@ namespace libconnection
 
         public virtual void Dispose()
         {
-            receiver?.Dispose();
-            transmitter?.Dispose();
+            if(!disposed && transmitter != null)
+            {
+                receiver?.Dispose();
+                transmitter?.Dispose();
+                disposed = true;
+            }
         }
     }
 }

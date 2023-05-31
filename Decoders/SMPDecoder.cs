@@ -37,9 +37,12 @@ namespace libconnection.Decoders
 
         public override void Dispose()
         {
-            GC.SuppressFinalize(this);
-            smp.Dispose();
-            base.Dispose();
+            if(!disposed)
+            {
+                GC.SuppressFinalize(this);
+                smp.Dispose();
+                base.Dispose();
+            }
         }
     }
 }

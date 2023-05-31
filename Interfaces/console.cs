@@ -14,7 +14,7 @@ namespace libconnection.Interfaces
         {
             base.TransmitMessage(msg);
             string message = Encoding.ASCII.GetString(msg.Data);
-            Console.WriteLine(message);
+            Console.Write(message);
         }
     }
 }

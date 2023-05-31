@@ -14,9 +14,12 @@ namespace libconnection
 
         private readonly Queue<Message> receivedMessage = new();
         private readonly SemaphoreSlim semaphore = new(0);
-        public StreamPipe()
+        public StreamPipe(CancellationToken token)
         {
-
+            token.Register(() =>
+            {
+                Dispose();
+            });
         }
 
         private readonly List<DataStream> streams = new ();
