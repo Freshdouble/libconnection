@@ -30,6 +30,16 @@ namespace libconnection
         }
 
         public abstract bool IsInterface { get; }
+        public virtual int MTU { get; } = 0;
+
+        protected int GetTransmitterMTU()
+        {
+            if(transmitter != null)
+            {
+                return transmitter.MTU;
+            }
+            return 0;
+        }
 
         public virtual void AddReceiverStage(DataStream stage, bool overwrite = false)
         {
@@ -65,7 +75,24 @@ namespace libconnection
 
             try
             {
-                transmitter?.TransmitMessage(message);
+                if(transmitter!= null)
+                {
+                    if(transmitter.MTU > 0)
+                    {
+                        if(message.Length > transmitter.MTU)
+                        {
+                            Console.WriteLine($"WARNING: Message length exeeds MTU in {nameof(transmitter)}");
+                        }
+                        else
+                        {
+                            transmitter.TransmitMessage(message);
+                        }
+                    }
+                    else
+                    {
+                        transmitter.TransmitMessage(message);
+                    }
+                }
             }
             catch(Exception ex)
             {

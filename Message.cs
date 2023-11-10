@@ -50,6 +50,8 @@ namespace libconnection
 
         public int Port { get; set; } = 0;
 
+        public object CustomObject { get; set; } = null;
+
         public byte[] Data
         {
             get

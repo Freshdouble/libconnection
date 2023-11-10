@@ -1,5 +1,8 @@
 ﻿using libconnection.Decoders;
 using libconnection.Interfaces;
+using libconnection.Interfaces.CAN;
+using libconnection.Interfaces.MQTT;
+using libconnection.Interfaces.Test;
 using libconnection.Interfaces.UDP;
 using System;
 using System.Collections.Generic;
@@ -27,12 +30,20 @@ namespace libconnection
                 case "smp":
                     return new SMPDecoder();
                 case "console":
+                case "testsink":
                     return new console();
                 case "fileinput":
                     return new FileInputInterface(initialization["file"]);
                 case "fileoutput":
                     return new FileOutputInterface(initialization["file"]);
-                    
+                case "testsource":
+                    return TestSource.GenerateWithParameters(initialization);
+                case "mqtttransmitter":
+                    return MqttTransmitter.GenerateWithParameters(initialization);
+                case "can":
+                    return CAN.GenerateWithParameters(initialization);
+
+
             }
             return null;
         }

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using libsmp;
 
@@ -32,7 +33,26 @@ namespace libconnection.Decoders
 
         public override void TransmitMessage(Message message)
         {
-            base.TransmitMessage(new Message(smp.GenerateMessage(message.Data)));
+            var transmitterMTU = GetTransmitterMTU();
+            var encodedMessage = smp.GenerateMessage(message.Data);
+            if (transmitterMTU > 0)
+            {
+                int currentIndex = 0;
+                while(currentIndex < encodedMessage.Length)
+                {
+                    var chunk = encodedMessage.Skip(currentIndex).Take(transmitterMTU);
+                    if (!chunk.Any())
+                    {
+                        break;
+                    }
+                    base.TransmitMessage(new Message(chunk));
+                    currentIndex += transmitterMTU;
+                }
+            }
+            else
+            {
+                base.TransmitMessage(new Message(encodedMessage));
+            }
         }
 
         public override void Dispose()
