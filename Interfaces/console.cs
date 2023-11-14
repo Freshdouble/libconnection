@@ -8,13 +8,14 @@ namespace libconnection.Interfaces
 {
     public class console : DataStream
     {
+        private ConsoleLogger logger = ConsoleLogger.GetInstance();
         public override bool IsInterface => false;
 
         public override void TransmitMessage(Message msg)
         {
             base.TransmitMessage(msg);
             string message = Encoding.ASCII.GetString(msg.Data);
-            Console.Write(message);
+            logger.Write(message);
         }
     }
 }

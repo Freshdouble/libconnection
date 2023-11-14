@@ -3,6 +3,7 @@ using SocketCANSharp;
 using SocketCANSharp.Network;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Text;
@@ -36,19 +37,19 @@ namespace libconnection.Interfaces.CAN
 
             if (parameter.ContainsKey("mask"))
             {
-                mask = uint.Parse(parameter["mask"]);
+                mask = uint.Parse(parameter["mask"], NumberStyles.HexNumber);
             }
             if (parameter.ContainsKey("id"))
             {
-                id = uint.Parse(parameter["id"]);
+                id = uint.Parse(parameter["id"], NumberStyles.HexNumber);
             }
             if (parameter.ContainsKey("appendidfilter"))
             {
-                appendfilter = uint.Parse(parameter["appendidfilter"]);
+                appendfilter = uint.Parse(parameter["appendidfilter"], NumberStyles.HexNumber);
             }
             if (parameter.ContainsKey("transmitid"))
             {
-                transmitid = int.Parse(parameter["transmitid"]);
+                transmitid = int.Parse(parameter["transmitid"], NumberStyles.HexNumber);
             }
 
             return new CAN(mask, id)
@@ -58,7 +59,7 @@ namespace libconnection.Interfaces.CAN
             };
         }
 
-        public CAN() : this(0,0)
+        public CAN() : this(0, 0)
         {
 
         }
@@ -67,12 +68,14 @@ namespace libconnection.Interfaces.CAN
         {
             Mask = mask;
             ID = id;
-            if(Environment.OSVersion.Platform != PlatformID.Unix)
+            if (Environment.OSVersion.Platform != PlatformID.Unix)
             {
                 throw new SystemException("The can driver can only be used on systems, that support socketcan");
             }
 
-            var vcan0 = CanNetworkInterface.GetAllInterfaces(true).First(iface => iface.Name.Equals("vcan0"));
+            var canInterfaces = CanNetworkInterface.GetAllInterfaces(false);
+            var vcan0 = canInterfaces.First();
+
             CanFilter filter = new CanFilter();
             filter.CanMask = Mask;
             filter.CanId = ID;
@@ -86,10 +89,10 @@ namespace libconnection.Interfaces.CAN
                 while (!token.IsCancellationRequested)
                 {
                     var frame = await CanReceiveAsync(token);
-                    if(frame.Length > 0)
+                    if (frame.Length > 0)
                     {
                         List<byte> list = new();
-                        if(AppendIDFilterMask != 0)
+                        if (AppendIDFilterMask != 0)
                         {
                             var id = (frame.CanId & AppendIDFilterMask) & 0xFFFFFFF;
                             if (ExtendedCAN)
@@ -124,19 +127,19 @@ namespace libconnection.Interfaces.CAN
         public override void TransmitMessage(Message message)
         {
             int transmitterID = TransmitterID;
-            switch(message.CustomObject)
+            switch (message.CustomObject)
             {
                 case int transmitID:
                     transmitterID = transmitID;
                     break;
                 case string transmitIDString:
-                    if(!int.TryParse(transmitIDString,out transmitterID))
+                    if (!int.TryParse(transmitIDString, out transmitterID))
                     {
                         transmitterID = TransmitterID;
                     }
                     break;
             }
-            if(transmitterID >= 0)
+            if (transmitterID >= 0)
             {
                 base.TransmitMessage(message);
                 socket.Write(new CanFrame((uint)transmitterID, message.Data));
@@ -160,7 +163,7 @@ namespace libconnection.Interfaces.CAN
                 cts.Dispose();
                 socket.Dispose();
             }
-            catch(Exception)
+            catch (Exception)
             {
 
             }
