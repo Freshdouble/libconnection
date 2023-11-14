@@ -77,11 +77,9 @@ namespace libconnection.Interfaces.UDP
             if (localEndpoint != null)
             {
                 udp = new UdpClient(7000);
+                var token = cts.Token;
                 receiverTask = Task.Run(async () =>
                 {
-                    var token = cts.Token;
-                    try
-                    {
                         while (!token.IsCancellationRequested)
                         {
                             try
@@ -106,12 +104,7 @@ namespace libconnection.Interfaces.UDP
                             }
                         }
                         return true;
-                    }
-                    catch (Exception ex)
-                    {
-                        return false;
-                    }
-                });
+                }, token);
             }
             else
             {

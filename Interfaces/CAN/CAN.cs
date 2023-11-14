@@ -15,12 +15,13 @@ namespace libconnection.Interfaces.CAN
     {
         public override bool IsInterface => true;
         public new int MTU { get; } = 8;
-
-        public uint ReceiverID { get; set; } = 0;
         public int TransmitterID { get; set; } = -1;
-
-        public bool AppendID { get; set; } = false;
         public bool ExtendedCAN { get; set; } = false;
+
+        public uint Mask { get; }
+        public uint ID { get; }
+
+        public uint AppendIDFilterMask { get; set; } = 0;
 
         private readonly RawCanSocket socket = new RawCanSocket();
         private readonly Task thread;
@@ -28,33 +29,69 @@ namespace libconnection.Interfaces.CAN
 
         public static CAN GenerateWithParameters(IDictionary<string, string> parameter)
         {
-            return new CAN()
+            uint mask = 0;
+            uint id = 0;
+            uint appendfilter = 0;
+            int transmitid = 0;
+
+            if (parameter.ContainsKey("mask"))
             {
+                mask = uint.Parse(parameter["mask"]);
+            }
+            if (parameter.ContainsKey("id"))
+            {
+                id = uint.Parse(parameter["id"]);
+            }
+            if (parameter.ContainsKey("appendidfilter"))
+            {
+                appendfilter = uint.Parse(parameter["appendidfilter"]);
+            }
+            if (parameter.ContainsKey("transmitid"))
+            {
+                transmitid = int.Parse(parameter["transmitid"]);
+            }
+
+            return new CAN(mask, id)
+            {
+                AppendIDFilterMask = appendfilter,
+                TransmitterID = transmitid
             };
         }
 
-        public CAN()
+        public CAN() : this(0,0)
         {
+
+        }
+
+        public CAN(uint mask, uint id)
+        {
+            Mask = mask;
+            ID = id;
             if(Environment.OSVersion.Platform != PlatformID.Unix)
             {
                 throw new SystemException("The can driver can only be used on systems, that support socketcan");
             }
 
             var vcan0 = CanNetworkInterface.GetAllInterfaces(true).First(iface => iface.Name.Equals("vcan0"));
+            CanFilter filter = new CanFilter();
+            filter.CanMask = Mask;
+            filter.CanId = ID;
+            socket.CanFilters = new CanFilter[] { filter };
             socket.Bind(vcan0);
+
+            var token = cts.Token;
 
             thread = Task.Run(async () =>
             {
-                var token = cts.Token;
                 while (!token.IsCancellationRequested)
                 {
                     var frame = await CanReceiveAsync(token);
                     if(frame.Length > 0)
                     {
                         List<byte> list = new();
-                        if(AppendID)
+                        if(AppendIDFilterMask != 0)
                         {
-                            var id = frame.CanId & 0xFFFFFFF;
+                            var id = (frame.CanId & AppendIDFilterMask) & 0xFFFFFFF;
                             if (ExtendedCAN)
                             {
                                 list.Add((byte)((id >> 24) & 0xFF));
@@ -67,7 +104,7 @@ namespace libconnection.Interfaces.CAN
                         base.ReceiveMessage(new Message(list));
                     }
                 }
-            });
+            }, token);
         }
 
         private async Task<CanFrame> CanReceiveAsync(CancellationToken token)
@@ -77,17 +114,10 @@ namespace libconnection.Interfaces.CAN
                 CanFrame frame;
                 while (socket.Read(out frame) <= 0)
                 {
-                    if (token.IsCancellationRequested)
-                    {
-                        frame = new CanFrame()
-                        {
-                            Length = 0
-                        };
-                        break;
-                    }
+                    token.ThrowIfCancellationRequested();
                 }
                 return frame;
-            });
+            }, token);
             return await task;
         }
 
