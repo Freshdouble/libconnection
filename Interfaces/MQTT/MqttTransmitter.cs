@@ -14,10 +14,11 @@ namespace libconnection.Interfaces.MQTT
     class MqttTransmitter : DataStream
     {
         private readonly IMqttClient mqttClient;
-        private CancellationTokenSource cts = new CancellationTokenSource();
         public override bool IsInterface => true;
 
         public string Topic { get; set; } = string.Empty;
+
+        private CancellationToken token = CancellationToken.None;
 
         public static MqttTransmitter GenerateWithParameters(IDictionary<string, string> parameter)
         {
@@ -29,16 +30,33 @@ namespace libconnection.Interfaces.MQTT
             return new MqttTransmitter(parameter["broker"], parameter["id"], topic);
         }
 
+
+        private readonly string broker;
+        private readonly string id;
         MqttTransmitter(string broker, string id, string topic) : this()
         {
             Topic = topic;
-            ConnectAsync(broker, id, cts.Token).Wait();
+            this.broker = broker;
+            this.id = id;
         }
 
         MqttTransmitter()
         {
             var factory = new MqttFactory();
             mqttClient = factory.CreateMqttClient();
+        }
+
+        public override async Task StartStream(CancellationToken token)
+        {
+            this.token = token;
+            await ConnectAsync(broker, id, token);
+            await Task.Run(async () =>
+            {
+                while(!token.IsCancellationRequested)
+                {
+                    await mqttClient.ReconnectAsync();
+                }
+            }, token);
         }
 
         public async Task ConnectAsync(string broker, string clientID, CancellationToken token)
@@ -58,10 +76,6 @@ namespace libconnection.Interfaces.MQTT
                 .WithPayload(data)
                 .Build();
 
-            if(!mqttClient.IsConnected)
-            {
-                await mqttClient.ReconnectAsync(token);
-            }
             if(mqttClient.IsConnected)
             {
                 await mqttClient.PublishAsync(message, token);
@@ -73,24 +87,12 @@ namespace libconnection.Interfaces.MQTT
             base.TransmitMessage(message);
             if(message.CustomObject != null && message.CustomObject is string str)
             {
-                SendData(message.Data, str, cts.Token).Wait();
+                SendData(message.Data, str, token).Wait();
             }
             else if(!string.IsNullOrWhiteSpace(Topic))
             {
-                SendData(message.Data, Topic, cts.Token).Wait();
+                SendData(message.Data, Topic, token).Wait();
             }
-        }
-
-        public override void Dispose()
-        {
-            try
-            {
-                base.Dispose();
-                cts.Cancel();
-                Task.Delay(10).Wait();
-                cts.Dispose();
-            }
-            catch(Exception) { }
         }
     }
 }

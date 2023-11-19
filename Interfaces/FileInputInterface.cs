@@ -10,8 +10,7 @@ namespace libconnection.Interfaces
 {
     public class FileInputInterface : DataStream
     {
-        private FileStream file;
-        private CancellationTokenSource cts = new CancellationTokenSource();
+        private readonly FileStream file;
         public FileInputInterface(string filename) : this(File.Open(filename, FileMode.Open, FileAccess.Read))
         {
 
@@ -20,38 +19,30 @@ namespace libconnection.Interfaces
         public FileInputInterface(FileStream fs)
         {
             file = fs;
-            Task.Run(async () =>
+        }
+
+        public override async Task StartStream(CancellationToken t)
+        {
+            await Task.Delay(1000, t);
+            while (!t.IsCancellationRequested)
             {
-                await Task.Delay(1000);
-                var t = cts.Token;
-                while(!t.IsCancellationRequested)
+                byte[] buffer = new byte[1024];
+                int bytesRead = await file.ReadAsync(buffer, t);
+                if (bytesRead > 0)
                 {
-                    try
-                    {
-                        byte[] buffer = new byte[1024];
-                        int bytesRead = await fs.ReadAsync(buffer, t);
-                        if (bytesRead > 0)
-                        {
-                            ReceiveMessage(new Message(buffer.Take(bytesRead)));
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        ThrowCriticalException(ex);
-                    }
+                    ReceiveMessage(new Message(buffer.Take(bytesRead)));
                 }
-            });
+            }
         }
 
         public override bool IsInterface => true;
 
         public override void Dispose()
         {
+            GC.SuppressFinalize(this);
             if(!disposed)
             {
                 base.Dispose();
-                cts.Cancel();
-                cts.Dispose();
                 file?.Dispose();
             }
         }

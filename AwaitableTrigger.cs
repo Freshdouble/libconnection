@@ -10,14 +10,8 @@ namespace libconnection
     public sealed class AwaitableTrigger
     {
         private SemaphoreSlim sslm = new SemaphoreSlim(0, 1);
-        private CancellationToken ct;
-        public AwaitableTrigger(CancellationToken ct, bool isTriggered = false)
+        public AwaitableTrigger()
         {
-            this.ct = ct;
-            if(isTriggered)
-            {
-                sslm.Release();
-            }
         }
 
         public bool WillWait => sslm.CurrentCount == 0;
@@ -30,9 +24,9 @@ namespace libconnection
             }
         }
 
-        public Task WaitAsync()
+        public Task WaitAsync(CancellationToken token)
         {
-            return sslm.WaitAsync(ct);
+            return sslm.WaitAsync(token);
         }
     }
 }

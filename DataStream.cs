@@ -21,8 +21,6 @@ namespace libconnection
         protected DataStream receiver;
         protected DataStream transmitter;
         public event EventHandler<MessageEventArgs> MessageReceived;
-        public event EventHandler<ExceptionEventArgs> ExceptionReceived;
-        public event EventHandler<EventArgs> BrokenPipe;
         protected bool disposed = false;
 
         public DataStream()
@@ -31,6 +29,16 @@ namespace libconnection
 
         public abstract bool IsInterface { get; }
         public virtual int MTU { get; } = 0;
+
+        public async Task StartStream()
+        {
+            await StartStream(CancellationToken.None);
+        }
+
+        public virtual async Task StartStream(CancellationToken token)
+        {
+            await transmitter?.StartStream(token);
+        }
 
         protected int GetTransmitterMTU()
         {
@@ -52,7 +60,7 @@ namespace libconnection
 
         public virtual void AddTransmitterStage(DataStream stage, bool overwrite = false)
         {
-            if(IsInterface)
+            if (IsInterface)
             {
                 throw new InvalidOperationException("Cannot add a transmitter stage to a transmitter");
             }
@@ -63,18 +71,8 @@ namespace libconnection
             transmitter = stage;
         }
 
-        public bool PipeIsBroken { get; protected set; } = false;
-        public List<Exception> ThrownExceptions { get; } = new ();
-
         public virtual void TransmitMessage(Message message)
         {
-            if(PipeIsBroken)
-            {
-                throw new InvalidOperationException("Cannot write to a broken pipe");
-            }
-
-            try
-            {
                 if(transmitter!= null)
                 {
                     if(transmitter.MTU > 0)
@@ -93,47 +91,15 @@ namespace libconnection
                         transmitter.TransmitMessage(message);
                     }
                 }
-            }
-            catch(Exception ex)
-            {
-                ThrowCriticalException(ex);
-            }
         }
 
         protected virtual void ReceiveMessage(Message message)
         {
-            if (PipeIsBroken)
-            {
-                throw new InvalidOperationException("Cannot write to a broken pipe");
-            }
-            try
-            {
                 receiver?.ReceiveMessage(message);
                 MessageReceived?.Invoke(this, new MessageEventArgs()
                 {
                     Message = message
                 });
-            }
-            catch (Exception ex)
-            {
-                ThrowCriticalException(ex);
-            }
-        }
-
-        protected void ThrowUncriticalExcpeption(Exception ex)
-        {
-            ThrownExceptions.Add(ex);
-            ExceptionReceived?.Invoke(this, new ExceptionEventArgs
-            {
-                Exception = new AggregateException(ThrownExceptions)
-            });
-        }
-
-        protected void ThrowCriticalException(Exception ex)
-        {
-            PipeIsBroken = true;
-            ThrowUncriticalExcpeption(ex);
-            BrokenPipe?.Invoke(this, new EventArgs());
         }
 
         public virtual void Dispose()

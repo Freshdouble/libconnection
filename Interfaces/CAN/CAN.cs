@@ -25,8 +25,6 @@ namespace libconnection.Interfaces.CAN
         public uint AppendIDFilterMask { get; set; } = 0;
 
         private readonly RawCanSocket socket = new RawCanSocket();
-        private readonly Task thread;
-        private readonly CancellationTokenSource cts = new CancellationTokenSource();
 
         public static CAN GenerateWithParameters(IDictionary<string, string> parameter)
         {
@@ -81,33 +79,6 @@ namespace libconnection.Interfaces.CAN
             filter.CanId = ID;
             socket.CanFilters = new CanFilter[] { filter };
             socket.Bind(vcan0);
-
-            var token = cts.Token;
-
-            thread = Task.Run(async () =>
-            {
-                while (!token.IsCancellationRequested)
-                {
-                    var frame = await CanReceiveAsync(token);
-                    if (frame.Length > 0)
-                    {
-                        List<byte> list = new();
-                        if (AppendIDFilterMask != 0)
-                        {
-                            var id = (frame.CanId & AppendIDFilterMask) & 0xFFFFFFF;
-                            if (ExtendedCAN)
-                            {
-                                list.Add((byte)((id >> 24) & 0xFF));
-                                list.Add((byte)((id >> 16) & 0xFF));
-                            }
-                            list.Add((byte)((id >> 8) & 0xFF));
-                            list.Add((byte)((id >> 0) & 0xFF));
-                        }
-                        list.AddRange(frame.Data.Take(frame.Length));
-                        base.ReceiveMessage(new Message(list));
-                    }
-                }
-            }, token);
         }
 
         private async Task<CanFrame> CanReceiveAsync(CancellationToken token)
@@ -122,6 +93,31 @@ namespace libconnection.Interfaces.CAN
                 return frame;
             }, token);
             return await task;
+        }
+
+        public override async Task StartStream(CancellationToken token)
+        {
+            while (!token.IsCancellationRequested)
+            {
+                var frame = await CanReceiveAsync(token);
+                if (frame.Length > 0)
+                {
+                    List<byte> list = new();
+                    if (AppendIDFilterMask != 0)
+                    {
+                        var id = (frame.CanId & AppendIDFilterMask) & 0xFFFFFFF;
+                        if (ExtendedCAN)
+                        {
+                            list.Add((byte)((id >> 24) & 0xFF));
+                            list.Add((byte)((id >> 16) & 0xFF));
+                        }
+                        list.Add((byte)((id >> 8) & 0xFF));
+                        list.Add((byte)((id >> 0) & 0xFF));
+                    }
+                    list.AddRange(frame.Data.Take(frame.Length));
+                    base.ReceiveMessage(new Message(list));
+                }
+            }
         }
 
         public override void TransmitMessage(Message message)
@@ -148,25 +144,8 @@ namespace libconnection.Interfaces.CAN
 
         public override void Dispose()
         {
-            try
-            {
                 base.Dispose();
-                cts.Cancel();
-                try
-                {
-                    thread.Wait(1000);
-                }
-                catch (AggregateException)
-                {
-
-                }
-                cts.Dispose();
                 socket.Dispose();
-            }
-            catch (Exception)
-            {
-
-            }
         }
     }
 }

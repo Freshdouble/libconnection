@@ -21,9 +21,7 @@ namespace libconnection.Interfaces.UDP
 
         private Timer heartbeatTimer = new Timer(100);
 
-        private Task<bool> receiverTask = null;
         private UdpClient udp;
-        private CancellationTokenSource cts = new CancellationTokenSource();
         private bool useserverprotocoll;
         private IPEndPoint localEndpoint;
         private UdpClient sendclient;
@@ -65,8 +63,11 @@ namespace libconnection.Interfaces.UDP
             return new UdpTransceiver(local, remote, sendheartbeat, useserverprotocol);
         }
 
+        private readonly bool sendHeartbeat;
+
         public UdpTransceiver(IPEndPoint localEndpoint, IPEndPoint remoteEndpoint = null, bool sendHeartbeat = false, bool useserverprotocoll = false)
         {
+            this.sendHeartbeat= sendHeartbeat;
             this.useserverprotocoll = useserverprotocoll;
             RemoteEndpoint = remoteEndpoint;
             this.localEndpoint = localEndpoint;
@@ -77,40 +78,11 @@ namespace libconnection.Interfaces.UDP
             if (localEndpoint != null)
             {
                 udp = new UdpClient(7000);
-                var token = cts.Token;
-                receiverTask = Task.Run(async () =>
-                {
-                        while (!token.IsCancellationRequested)
-                        {
-                            try
-                            {
-                                var result = await udp.ReceiveAsync(token);
-                                if (useserverprotocoll || sendHeartbeat)
-                                {
-                                    Package data = Package.parse(result.Buffer);
-                                    if (data.type == Package.Type.DATAFRAME)
-                                    {
-                                        base.ReceiveMessage(new Message(data.payload));
-                                    }
-                                }
-                                else
-                                {
-                                    base.ReceiveMessage(new Message(result.Buffer));
-                                }
-                            }
-                            catch(SocketException)
-                            {
-                                udp = new UdpClient(localEndpoint);
-                            }
-                        }
-                        return true;
-                }, token);
             }
             else
             {
                 udp = new UdpClient();
             }
-
             if (sendHeartbeat)
             {
                 heartbeatTimer.Elapsed += HeartbeatTimer_Elapsed;
@@ -119,13 +91,35 @@ namespace libconnection.Interfaces.UDP
             }
         }
 
+        public override async Task StartStream(CancellationToken token)
+        {
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    var result = await udp.ReceiveAsync(token);
+                    if (useserverprotocoll || sendHeartbeat)
+                    {
+                        Package data = Package.parse(result.Buffer);
+                        if (data.type == Package.Type.DATAFRAME)
+                        {
+                            base.ReceiveMessage(new Message(data.payload));
+                        }
+                    }
+                    else
+                    {
+                        base.ReceiveMessage(new Message(result.Buffer));
+                    }
+                }
+                catch (SocketException)
+                {
+                    udp = new UdpClient(localEndpoint);
+                }
+            }
+        }
+
         public override void TransmitMessage(Message message)
         {
-            base.TransmitMessage(message);
-            if (cts == null)
-            {
-                throw new ObjectDisposedException("UDPTransceiver is disposed");
-            }
             if (RemoteEndpoint != null)
             {
                 if (useserverprotocoll)
@@ -172,13 +166,6 @@ namespace libconnection.Interfaces.UDP
             {
                 heartbeatTimer?.Stop();
                 heartbeatTimer?.Dispose();
-                heartbeatTimer = null;
-                cts?.Cancel();
-                receiverTask?.Wait(1000);
-                cts?.Dispose();
-                receiverTask?.Dispose();
-                cts = null;
-                receiverTask = null;
                 udp?.Dispose();
                 sendclient?.Dispose();
                 base.Dispose();

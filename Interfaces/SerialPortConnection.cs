@@ -9,10 +9,7 @@ namespace libconnection.Interfaces
 {
     public class SerialPortConnection : DataStream, IDisposable
     {
-        private CancellationTokenSource cts = new CancellationTokenSource();
-        private SerialPort port = null;
-        private Task workingTask;
-        new private bool disposed = false;
+        private readonly SerialPort port = null;
 
         public static SerialPortConnection GenerateWithParameters(IDictionary<string, string> parameters)
         {
@@ -65,61 +62,34 @@ namespace libconnection.Interfaces
 
         public SerialPortConnection(SerialPort port)
         {
-            CancellationToken token = cts.Token;
             if (!port.IsOpen)
             {
                 port.Open();
             }
-            ExecutionContext ec = ExecutionContext.Capture();
-            SemaphoreSlim sslm = new SemaphoreSlim(1, 1);
-            workingTask = Task.Factory.StartNew(async () =>
-            {
-                AwaitableTrigger trigger = new AwaitableTrigger(token);
-                SerialDataReceivedEventHandler eventhandler = null;
-                eventhandler = (sender, eventargs) =>
-                {
-                    trigger.Trigger();
-                };
-                port.DataReceived += eventhandler;
-                bool shouldCancel = false;
-                while (!token.IsCancellationRequested && !shouldCancel)
-                {
-                    try
-                    {
-                        await trigger.WaitAsync().ConfigureAwait(false);
-                        token.ThrowIfCancellationRequested();
-                        while (port.BytesToRead > 0)
-                        {
-                            byte[] data = new byte[port.BytesToRead];
-                            port.Read(data, 0, data.Length);
-                            Message msg = new Message(data);
-                            if (SynchronizeContext)
-                            {
-                                await sslm.WaitAsync(token);
-                                token.ThrowIfCancellationRequested();
-                                ExecutionContext.Run(ec, (context) =>
-                                {
-                                    base.ReceiveMessage(msg);
-                                    if (sslm.CurrentCount == 0)
-                                    {
-                                        sslm.Release();
-                                    } 
-                                }, null);
-                            }
-                            else
-                            {
-                                base.ReceiveMessage(msg);
-                            }
-                        }
-                    }
-                    catch (TaskCanceledException)
-                    {
-                        shouldCancel = true;
-                    }
-                }
-                port.DataReceived -= eventhandler;
-            }, TaskCreationOptions.LongRunning);
             this.port = port;
+        }
+
+        public override async Task StartStream(CancellationToken token)
+        {
+            AwaitableTrigger trigger = new ();
+            void eventhandler(object sender, SerialDataReceivedEventArgs eventargs)
+            {
+                trigger.Trigger();
+            }
+
+            port.DataReceived += eventhandler;
+            while (!token.IsCancellationRequested)
+            {
+                    await trigger.WaitAsync(token);
+                    while (port.BytesToRead > 0)
+                    {
+                        byte[] data = new byte[port.BytesToRead];
+                        port.Read(data, 0, data.Length);
+                        var msg = new Message(data);
+                        base.ReceiveMessage(msg);
+                    }
+            }
+            port.DataReceived -= eventhandler;
         }
 
         public override void TransmitMessage(Message data)
@@ -128,28 +98,8 @@ namespace libconnection.Interfaces
             port.Write(msg, 0, msg.Length);
         }
 
-        ~SerialPortConnection()
-        {
-            Dispose();
-        }
-
-        private void StopExecution()
-        {
-            cts.Cancel();
-            try
-            {
-                workingTask.Wait(2000);
-            }
-            catch(Exception)
-            {
-
-            }
-            cts.Dispose();
-        }
-
         public void Close()
         {
-            StopExecution();
             if (port.IsOpen)
             {
                 port.Close();
@@ -158,11 +108,12 @@ namespace libconnection.Interfaces
 
         public override void Dispose()
         {
+            GC.SuppressFinalize(this);
             if (!disposed)
             {
                 Close();
                 port.Dispose();
-                disposed = true;
+                base.Dispose();
             }
         }
     }
