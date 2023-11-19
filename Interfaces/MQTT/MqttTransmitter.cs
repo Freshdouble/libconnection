@@ -18,16 +18,28 @@ namespace libconnection.Interfaces.MQTT
 
         public string Topic { get; set; } = string.Empty;
 
+        public string TopicPrefix { get; set; } = string.Empty;
+
         private CancellationToken token = CancellationToken.None;
 
         public static MqttTransmitter GenerateWithParameters(IDictionary<string, string> parameter)
         {
             string topic = string.Empty;
+            string topicprefix = string.Empty;
             if (parameter.ContainsKey("topic"))
             {
                 topic = parameter["topic"];
             }
-            return new MqttTransmitter(parameter["broker"], parameter["id"], topic);
+
+            if(parameter.ContainsKey("prefix"))
+            {
+                topicprefix = parameter["prefix"];
+            }
+
+            return new MqttTransmitter(parameter["broker"], parameter["id"], topic)
+            {
+                TopicPrefix = topicprefix
+            };
         }
 
 
@@ -49,14 +61,20 @@ namespace libconnection.Interfaces.MQTT
         public override async Task StartStream(CancellationToken token)
         {
             this.token = token;
-            await ConnectAsync(broker, id, token);
-            await Task.Run(async () =>
+            mqttClient.DisconnectedAsync += async (args) =>
             {
-                while(!token.IsCancellationRequested)
+                if (args.ClientWasConnected)
                 {
-                    await mqttClient.ReconnectAsync();
+                    await mqttClient.ReconnectAsync(token);
                 }
-            }, token);
+            };
+            await Task.Run(async () => {
+                while(!mqttClient.IsConnected)
+                {
+                    await ConnectAsync(broker, id, token);
+                    await Task.Delay(10);
+                }
+            });
         }
 
         public async Task ConnectAsync(string broker, string clientID, CancellationToken token)
@@ -76,7 +94,7 @@ namespace libconnection.Interfaces.MQTT
                 .WithPayload(data)
                 .Build();
 
-            if(mqttClient.IsConnected)
+            if (mqttClient.IsConnected)
             {
                 await mqttClient.PublishAsync(message, token);
             }
@@ -85,11 +103,31 @@ namespace libconnection.Interfaces.MQTT
         public override void TransmitMessage(Message message)
         {
             base.TransmitMessage(message);
-            if(message.CustomObject != null && message.CustomObject is string str)
+            if (message.CustomObject != null && message.CustomObject is string str)
             {
-                SendData(message.Data, str, token).Wait();
+                string topic;
+                string prefix = string.Empty;
+                if (str.StartsWith("/"))
+                {
+                    topic = Topic + str;
+                }
+                else
+                {
+                    topic = Topic + "/" + str;
+                }
+                if(!Topic.StartsWith("/"))
+                {
+                    prefix += "/";
+                }
+                prefix += TopicPrefix;
+                if(prefix.EndsWith("/"))
+                {
+                    prefix = prefix.Remove(prefix.Length - 1, 1);
+                }
+                topic += prefix;
+                SendData(message.Data, topic, token).Wait();
             }
-            else if(!string.IsNullOrWhiteSpace(Topic))
+            else if (!string.IsNullOrWhiteSpace(Topic))
             {
                 SendData(message.Data, Topic, token).Wait();
             }

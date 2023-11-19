@@ -31,6 +31,11 @@ namespace libconnection
             creationTime = DateTime.Now;
         }
 
+        public Message(string message) : this(Encoding.ASCII.GetBytes(message))
+        {
+            
+        }
+
         public bool UseCompressedPrint { get; set; } = true;
         public CompressionMethodType CompressionMethod { get; set; } = CompressionMethodType.CsvCompatibleOrdered;
 

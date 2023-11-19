@@ -72,6 +72,10 @@ namespace libconnection.Interfaces.CAN
             }
 
             var canInterfaces = CanNetworkInterface.GetAllInterfaces(false);
+            if(!canInterfaces?.Any() ?? false)
+            {
+                throw new ArgumentException("No can interfaces found!");
+            }
             var vcan0 = canInterfaces.First();
 
             CanFilter filter = new CanFilter();
